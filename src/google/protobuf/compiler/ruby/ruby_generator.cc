@@ -28,6 +28,8 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+#include <sstream>
+
 #include <google/protobuf/compiler/code_generator.h>
 #include <google/protobuf/compiler/plugin.h>
 #include <google/protobuf/descriptor.h>
@@ -35,13 +37,13 @@
 #include <google/protobuf/io/printer.h>
 #include <google/protobuf/io/zero_copy_stream.h>
 
-#include <ctype.h>
-#include <sstream>
+#include <google/protobuf/compiler/ruby/ruby_generator.h>
 
 using google::protobuf::internal::scoped_ptr;
 
 namespace google {
 namespace protobuf {
+namespace compiler {
 namespace ruby {
 
 // Forward decls.
@@ -78,6 +80,7 @@ std::string LabelForField(const google::protobuf::FieldDescriptor* field) {
     case FieldDescriptor::LABEL_OPTIONAL: return "optional";
     case FieldDescriptor::LABEL_REQUIRED: return "required";
     case FieldDescriptor::LABEL_REPEATED: return "repeated";
+    default: assert(false); return "";
   }
 }
 
@@ -93,6 +96,7 @@ std::string TypeName(const google::protobuf::FieldDescriptor* field) {
     case FieldDescriptor::CPPTYPE_ENUM: return "enum";
     case FieldDescriptor::CPPTYPE_STRING: return "string";
     case FieldDescriptor::CPPTYPE_MESSAGE: return "message";
+    default: assert(false); return "";
   }
 }
 
@@ -286,30 +290,22 @@ void GenerateFile(const google::protobuf::FileDescriptor* file,
   EndPackageModules(levels, printer);
 }
 
+bool Generator::Generate(
+    const FileDescriptor* file,
+    const string& parameter,
+    GeneratorContext* generator_context,
+    string* error) const {
+  std::string filename =
+      StripDotProto(file->name()) + ".rb";
+  scoped_ptr<io::ZeroCopyOutputStream> output(generator_context->Open(filename));
+  io::Printer printer(output.get(), '$');
+
+  GenerateFile(file, &printer);
+
+  return true;
+}
+
 }  // namespace ruby
+}  // namespace compiler
 }  // namespace protobuf
 }  // namespace google
-
-class RubyCodeGenerator : public google::protobuf::compiler::CodeGenerator {
- public:
-  virtual bool Generate(
-      const google::protobuf::FileDescriptor* file,
-      const std::string& parameter,
-      google::protobuf::compiler::GeneratorContext* generator_context,
-      std::string* error) const {
-    std::string filename =
-        google::protobuf::ruby::StripDotProto(file->name()) + ".rb";
-    scoped_ptr<google::protobuf::io::ZeroCopyOutputStream> output(
-        generator_context->Open(filename));
-    google::protobuf::io::Printer printer(output.get(), '$');
-
-    google::protobuf::ruby::GenerateFile(file, &printer);
-
-    return true;
-  }
-};
-
-int main(int argc, char* argv[]) {
-  RubyCodeGenerator generator;
-  return google::protobuf::compiler::PluginMain(argc, argv, &generator);
-}
