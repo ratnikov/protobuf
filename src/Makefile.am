@@ -241,9 +241,12 @@ libprotoc_la_SOURCES =                                         \
   google/protobuf/compiler/java/java_doc_comment.h             \
   google/protobuf/compiler/python/python_generator.cc
 
-bin_PROGRAMS = protoc
+bin_PROGRAMS = protoc protoc-gen-ruby
 protoc_LDADD = $(PTHREAD_LIBS) libprotobuf.la libprotoc.la
 protoc_SOURCES = google/protobuf/compiler/main.cc
+
+protoc_gen_ruby_SOURCES = google/protobuf/compiler/ruby/protoc-gen-ruby.cc
+protoc_gen_ruby_SOURCES = $(PTHREAD_LIBS) libprotobuf.la libprotoc.la
 
 # Tests ==============================================================
 
