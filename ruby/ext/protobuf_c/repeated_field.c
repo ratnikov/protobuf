@@ -202,7 +202,24 @@ VALUE RepeatedField_dup(VALUE _self) {
     native_slot_dup(field_type, to_mem, from_mem);
     new_rptfield_self->size++;
   }
-  new_rptfield_self->size = self->size;
+
+  return new_rptfield;
+}
+
+VALUE RepeatedField_shallow_dup(VALUE _self) {
+  RepeatedField* self = ruby_to_RepeatedField(_self);
+  VALUE new_rptfield = RepeatedField_new_this_type(_self);
+  RepeatedField* new_rptfield_self = ruby_to_RepeatedField(new_rptfield);
+  RepeatedField_reserve(new_rptfield_self, self->size);
+  upb_fieldtype_t field_type = self->field_type;
+  size_t elem_size = native_slot_size(field_type);
+  size_t off = 0;
+  for (int i = 0; i < self->size; i++, off += elem_size) {
+    void* to_mem = (uint8_t *)new_rptfield_self->elements + off;
+    void* from_mem = (uint8_t *)self->elements + off;
+    memcpy(to_mem, from_mem, native_slot_size(field_type));
+    new_rptfield_self->size++;
+  }
 
   return new_rptfield;
 }
@@ -288,6 +305,34 @@ VALUE RepeatedField_inspect(VALUE _self) {
 
   str = rb_str_cat2(str, "]");
   return str;
+}
+
+VALUE RepeatedField_plus(VALUE _self, VALUE list) {
+  VALUE dupped = RepeatedField_shallow_dup(_self);
+
+  if (TYPE(list) == T_ARRAY) {
+    for (int i = 0; i < RARRAY_LEN(list); i++) {
+      VALUE elem = rb_ary_entry(list, i);
+      RepeatedField_push(dupped, elem);
+    }
+  } else if (RB_TYPE_P(list, T_DATA) && RTYPEDDATA_P(list) &&
+             RTYPEDDATA_TYPE(list) == &RepeatedField_type) {
+    RepeatedField* self = ruby_to_RepeatedField(_self);
+    RepeatedField* list_rptfield = ruby_to_RepeatedField(list);
+    if (self->field_type != list_rptfield->field_type ||
+        self->field_type_class != list_rptfield->field_type_class) {
+      rb_raise(rb_eArgError,
+               "Attempt to append RepeatedField with different element type.");
+    }
+    for (int i = 0; i < list_rptfield->size; i++) {
+      void* mem = RepeatedField_index_native(list, i);
+      RepeatedField_push_native(dupped, mem);
+    }
+  } else {
+    rb_raise(rb_eArgError, "Unknown type appending to RepeatedField");
+  }
+
+  return dupped;
 }
 
 static void validate_type_class(upb_fieldtype_t type, VALUE klass) {
@@ -408,5 +453,6 @@ void RepeatedField_register(VALUE module) {
   rb_define_method(klass, "==", RepeatedField_eq, 1);
   rb_define_method(klass, "hash", RepeatedField_hash, 0);
   rb_define_method(klass, "inspect", RepeatedField_inspect, 0);
+  rb_define_method(klass, "+", RepeatedField_plus, 1);
   rb_include_module(klass, rb_mEnumerable);
 }

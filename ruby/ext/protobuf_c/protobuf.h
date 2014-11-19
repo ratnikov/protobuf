@@ -251,6 +251,7 @@ VALUE RepeatedField_dup(VALUE _self);
 VALUE RepeatedField_eq(VALUE _self, VALUE _other);
 VALUE RepeatedField_hash(VALUE _self);
 VALUE RepeatedField_inspect(VALUE _self);
+VALUE RepeatedField_plus(VALUE _self, VALUE list);
 
 // -----------------------------------------------------------------------------
 // Message layout / storage.

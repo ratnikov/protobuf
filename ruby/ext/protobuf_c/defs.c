@@ -75,7 +75,7 @@ void SymbolTable_register(VALUE module) {
   VALUE klass = rb_define_class_under(
       module, "SymbolTable", rb_cObject);
   rb_define_alloc_func(klass, SymbolTable_alloc);
-  rb_define_method(klass, "add", SymbolTable_add, 2);
+  rb_define_method(klass, "add", SymbolTable_add, 1);
   rb_define_method(klass, "build", SymbolTable_build, 0);
   rb_define_method(klass, "lookup", SymbolTable_lookup, 1);
   rb_define_method(klass, "get_class", SymbolTable_get_class, 1);

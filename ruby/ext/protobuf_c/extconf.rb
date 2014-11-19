@@ -18,4 +18,4 @@ find_library("upb.pb_pic", "upb_pbdecoder_init", upb_path + "/lib") or
 $objs = ["protobuf.o", "defs.o", "storage.o", "message.o",
          "repeated_field.o", "encode_decode.o"]
 
-create_makefile("protobuf")
+create_makefile("protobuf_c")

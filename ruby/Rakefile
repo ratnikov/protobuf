@@ -10,10 +10,10 @@ spec = Gem::Specification.new do |s|
   s.authors     = ["Protobuf Authors"]
   s.email       = "protobuf@googlegroups.com"
 
-  s.files       = ["lib/protobuf.so"]
+  s.files       = ["lib/protobuf_c.so", "lib/protobuf.rb"]
 end
 
-Rake::ExtensionTask.new("protobuf", spec) do |ext|
+Rake::ExtensionTask.new("protobuf_c", spec) do |ext|
   ext.lib_dir = "lib"
   ext.config_script = "extconf.rb"
 end
@@ -23,7 +23,7 @@ Rake::TestTask.new(:test => :build) do |t|
 end
 
 task :chmod do
-  File.chmod(0755, "lib/protobuf.so")
+  File.chmod(0755, "lib/protobuf_c.so")
 end
 
 Gem::PackageTask.new(spec) do |pkg|

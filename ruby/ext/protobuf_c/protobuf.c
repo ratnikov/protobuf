@@ -46,7 +46,7 @@ VALUE get_def_obj(void* def) {
   return rb_hash_aref(upb_def_to_ruby_obj_map, ULL2NUM((intptr_t)def));
 }
 
-void Init_protobuf() {
+void Init_protobuf_c() {
   VALUE google = rb_define_module("Google");
   VALUE protobuf = rb_define_module_under(google, "Protobuf");
   VALUE internal = rb_define_module_under(protobuf, "Internal");
