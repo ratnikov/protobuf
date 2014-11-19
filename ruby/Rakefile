@@ -19,7 +19,7 @@ Rake::ExtensionTask.new("protobuf", spec) do |ext|
 end
 
 Rake::TestTask.new(:test => :build) do |t|
-  t.test_files = FileList["ext/protobuf/test*.rb"]
+  t.test_files = FileList["tests/*.rb"]
 end
 
 task :chmod do

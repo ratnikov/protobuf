@@ -200,6 +200,7 @@ VALUE RepeatedField_dup(VALUE _self) {
     void* to_mem = (uint8_t *)new_rptfield_self->elements + off;
     void* from_mem = (uint8_t *)self->elements + off;
     native_slot_dup(field_type, to_mem, from_mem);
+    new_rptfield_self->size++;
   }
   new_rptfield_self->size = self->size;
 
