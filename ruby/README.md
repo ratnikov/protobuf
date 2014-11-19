@@ -20,15 +20,15 @@ To build this Ruby extension, you will need:
 
 First, ensure that upb/ is checked out:
 
-$ cd ..   # top level protobuf directory
-$ git submodule init
-$ git submodule update
+    $ cd ..   # top level protobuf directory
+    $ git submodule init
+    $ git submodule update
 
 Then install the required Ruby gems:
 
-$ sudo gem install bundler rake rake-compiler rspec rubygems-tasks
+    $ sudo gem install bundler rake rake-compiler rspec rubygems-tasks
 
 Then build the Gem:
 
-$ rake gem
-$ gem install pkg/protobuf-$VERSION.gem
+    $ rake gem
+    $ gem install pkg/protobuf-$VERSION.gem
