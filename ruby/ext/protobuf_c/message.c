@@ -249,7 +249,7 @@ VALUE build_class_from_descriptor(Descriptor* desc) {
       // their own toplevel constant class name.
       rb_intern("Message"),
       rb_cObject);
-  rb_iv_set(klass, "@descriptor", desc->_value);
+  rb_iv_set(klass, "@descriptor", get_def_obj(desc->msgdef));
   rb_define_alloc_func(klass, Message_alloc);
   rb_define_method(klass, "method_missing",
                    Message_method_missing, -1);
@@ -317,7 +317,7 @@ VALUE build_module_from_enumdesc(EnumDescriptor* enumdesc) {
   rb_define_singleton_method(mod, "lookup", enum_lookup, 1);
   rb_define_singleton_method(mod, "resolve", enum_resolve, 1);
   rb_define_singleton_method(mod, "descriptor", enum_descriptor, 0);
-  rb_iv_set(mod, "@descriptor", enumdesc->_value);
+  rb_iv_set(mod, "@descriptor", get_def_obj(enumdesc->enumdef));
 
   return mod;
 }

@@ -68,45 +68,38 @@ typedef struct Builder Builder;
 // -----------------------------------------------------------------------------
 
 struct DescriptorPool {
-  VALUE _value;
   upb_symtab* symtab;
 };
 
 struct Descriptor {
-  VALUE _value;
   upb_msgdef* msgdef;
   MessageLayout* layout;
   VALUE klass;  // begins as nil
   VALUE fields;  // Ruby array of FieldDescriptor Ruby objects
-  VALUE field_map;  // Ruby hashmap from field name to FieldDescriptor Ruby object
   const upb_pbdecodermethod* fill_method;
   const upb_handlers* serialize_handlers;
 };
 
 struct FieldDescriptor {
-  VALUE _value;
   upb_fielddef* fielddef;
 };
 
 struct EnumDescriptor {
-  VALUE _value;
   upb_enumdef* enumdef;
   VALUE module;  // begins as nil
 };
 
 struct MessageBuilderContext {
-  VALUE _value;
   VALUE descriptor;
 };
 
 struct EnumBuilderContext {
-  VALUE _value;
   VALUE enumdesc;
 };
 
 struct Builder {
-  VALUE _value;
   VALUE pending_list;
+  upb_def** defs;  // used only while finalizing
 };
 
 extern VALUE cDescriptorPool;
@@ -324,7 +317,13 @@ const upb_pbdecodermethod *new_fillmsg_decodermethod(
 // -----------------------------------------------------------------------------
 // Global map from upb {msg,enum}defs to wrapper Descriptor/EnumDescriptor instances.
 // -----------------------------------------------------------------------------
-void add_def_obj(void* def, VALUE value);
-VALUE get_def_obj(void* def);
+void add_def_obj(const void* def, VALUE value);
+VALUE get_def_obj(const void* def);
 
-#endif  // EXPERIMENTAL_USERS_CFALLIN_PROTO3_RUBY_C_EXT_UPB_H_
+// -----------------------------------------------------------------------------
+// Utilities.
+// -----------------------------------------------------------------------------
+
+void check_upb_status(const upb_status* status, const char* msg);
+
+#endif  // __GOOGLE_PROTOBUF_RUBY_PROTOBUF_H__

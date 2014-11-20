@@ -39,14 +39,31 @@
 // Ruby integers) to MessageDef/EnumDef instances (as Ruby values).
 VALUE upb_def_to_ruby_obj_map;
 
-void add_def_obj(void* def, VALUE value) {
+void add_def_obj(const void* def, VALUE value) {
   rb_hash_aset(upb_def_to_ruby_obj_map, ULL2NUM((intptr_t)def), value);
 }
 
-VALUE get_def_obj(void* def) {
+VALUE get_def_obj(const void* def) {
   return rb_hash_aref(upb_def_to_ruby_obj_map, ULL2NUM((intptr_t)def));
 }
 
+// -----------------------------------------------------------------------------
+// Utilities.
+// -----------------------------------------------------------------------------
+
+// Raises a Ruby error if |status| is not OK, using its error message.
+void check_upb_status(const upb_status* status, const char* msg) {
+  if (!upb_ok(status)) {
+    rb_raise(rb_eRuntimeError, "%s: %s\n", msg, upb_status_errmsg(status));
+  }
+}
+
+// -----------------------------------------------------------------------------
+// Initialization/entry point.
+// -----------------------------------------------------------------------------
+
+// This must be named "Init_protobuf_c" because the Ruby module is named
+// "protobuf_c" -- the VM looks for this symbol in our .so.
 void Init_protobuf_c() {
   VALUE google = rb_define_module("Google");
   VALUE protobuf = rb_define_module_under(google, "Protobuf");
