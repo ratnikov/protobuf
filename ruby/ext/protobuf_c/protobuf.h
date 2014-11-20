@@ -43,20 +43,20 @@
 #include "upb/symtab.h"
 
 // Forward decls.
-struct SymbolTable;
-struct MessageDef;
-struct FieldDef;
-struct EnumDef;
+struct DescriptorPool;
+struct Descriptor;
+struct FieldDescriptor;
+struct EnumDescriptor;
 struct MessageLayout;
 struct MessageHeader;
 struct MessageBuilderContext;
 struct EnumBuilderContext;
 struct Builder;
 
-typedef struct SymbolTable SymbolTable;
-typedef struct MessageDef MessageDef;
-typedef struct FieldDef FieldDef;
-typedef struct EnumDef EnumDef;
+typedef struct DescriptorPool DescriptorPool;
+typedef struct Descriptor Descriptor;
+typedef struct FieldDescriptor FieldDescriptor;
+typedef struct EnumDescriptor EnumDescriptor;
 typedef struct MessageLayout MessageLayout;
 typedef struct MessageHeader MessageHeader;
 typedef struct MessageBuilderContext MessageBuilderContext;
@@ -67,28 +67,28 @@ typedef struct Builder Builder;
 // Ruby class structure definitions.
 // -----------------------------------------------------------------------------
 
-struct SymbolTable {
+struct DescriptorPool {
   VALUE _value;
   upb_symtab* symtab;
 };
 
-struct MessageDef {
+struct Descriptor {
   VALUE _value;
   upb_msgdef* msgdef;
   MessageLayout* layout;
   VALUE klass;  // begins as nil
-  VALUE fields;  // Ruby array of FieldDef Ruby objects
-  VALUE field_map;  // Ruby hashmap from field name to FieldDef Ruby object
+  VALUE fields;  // Ruby array of FieldDescriptor Ruby objects
+  VALUE field_map;  // Ruby hashmap from field name to FieldDescriptor Ruby object
   const upb_pbdecodermethod* fill_method;
   const upb_handlers* serialize_handlers;
 };
 
-struct FieldDef {
+struct FieldDescriptor {
   VALUE _value;
   upb_fielddef* fielddef;
 };
 
-struct EnumDef {
+struct EnumDescriptor {
   VALUE _value;
   upb_enumdef* enumdef;
   VALUE module;  // begins as nil
@@ -96,12 +96,12 @@ struct EnumDef {
 
 struct MessageBuilderContext {
   VALUE _value;
-  VALUE msgdef;
+  VALUE descriptor;
 };
 
 struct EnumBuilderContext {
   VALUE _value;
-  VALUE enumdef;
+  VALUE enumdesc;
 };
 
 struct Builder {
@@ -109,80 +109,80 @@ struct Builder {
   VALUE pending_list;
 };
 
-extern VALUE cSymbolTable;
-extern VALUE cMessageDef;
-extern VALUE cFieldDef;
-extern VALUE cEnumDef;
+extern VALUE cDescriptorPool;
+extern VALUE cDescriptor;
+extern VALUE cFieldDescriptor;
+extern VALUE cEnumDescriptor;
 extern VALUE cMessageBuilderContext;
 extern VALUE cEnumBuilderContext;
 extern VALUE cBuilder;
 
-void SymbolTable_mark(void* _self);
-void SymbolTable_free(void* _self);
-VALUE SymbolTable_alloc(VALUE klass);
-void SymbolTable_register(VALUE module);
-SymbolTable* ruby_to_SymbolTable(VALUE value);
-VALUE SymbolTable_add(VALUE _self, VALUE def);
-VALUE SymbolTable_build(VALUE _self);
-VALUE SymbolTable_lookup(VALUE _self, VALUE name);
-VALUE SymbolTable_get_class(VALUE _self, VALUE name);
-VALUE SymbolTable_get_enum(VALUE _self, VALUE name);
-VALUE SymbolTable_global_symtab(VALUE _self);
+void DescriptorPool_mark(void* _self);
+void DescriptorPool_free(void* _self);
+VALUE DescriptorPool_alloc(VALUE klass);
+void DescriptorPool_register(VALUE module);
+DescriptorPool* ruby_to_DescriptorPool(VALUE value);
+VALUE DescriptorPool_add(VALUE _self, VALUE def);
+VALUE DescriptorPool_build(VALUE _self);
+VALUE DescriptorPool_lookup(VALUE _self, VALUE name);
+VALUE DescriptorPool_get_class(VALUE _self, VALUE name);
+VALUE DescriptorPool_get_enum(VALUE _self, VALUE name);
+VALUE DescriptorPool_global_pool(VALUE _self);
 
-void MessageDef_mark(void* _self);
-void MessageDef_free(void* _self);
-VALUE MessageDef_alloc(VALUE klass);
-void MessageDef_register(VALUE module);
-MessageDef* ruby_to_MessageDef(VALUE value);
-VALUE MessageDef_name(VALUE _self);
-VALUE MessageDef_name_set(VALUE _self, VALUE str);
-VALUE MessageDef_fields(VALUE _self);
-VALUE MessageDef_lookup(VALUE _self, VALUE name);
-VALUE MessageDef_add_field(VALUE _self, VALUE obj);
-VALUE MessageDef_msgclass(VALUE _self);
-extern const rb_data_type_t _MessageDef_type;
+void Descriptor_mark(void* _self);
+void Descriptor_free(void* _self);
+VALUE Descriptor_alloc(VALUE klass);
+void Descriptor_register(VALUE module);
+Descriptor* ruby_to_Descriptor(VALUE value);
+VALUE Descriptor_name(VALUE _self);
+VALUE Descriptor_name_set(VALUE _self, VALUE str);
+VALUE Descriptor_fields(VALUE _self);
+VALUE Descriptor_lookup(VALUE _self, VALUE name);
+VALUE Descriptor_add_field(VALUE _self, VALUE obj);
+VALUE Descriptor_msgclass(VALUE _self);
+extern const rb_data_type_t _Descriptor_type;
 
-void FieldDef_mark(void* _self);
-void FieldDef_free(void* _self);
-VALUE FieldDef_alloc(VALUE klass);
-void FieldDef_register(VALUE module);
-FieldDef* ruby_to_FieldDef(VALUE value);
-VALUE FieldDef_name(VALUE _self);
-VALUE FieldDef_name_set(VALUE _self, VALUE str);
-VALUE FieldDef_type(VALUE _self);
-VALUE FieldDef_type_set(VALUE _self, VALUE type);
-VALUE FieldDef_label(VALUE _self);
-VALUE FieldDef_label_set(VALUE _self, VALUE label);
-VALUE FieldDef_number(VALUE _self);
-VALUE FieldDef_number_set(VALUE _self, VALUE number);
-VALUE FieldDef_submsg_name(VALUE _self);
-VALUE FieldDef_submsg_name_set(VALUE _self, VALUE value);
-VALUE FieldDef_subtype(VALUE _self);
-VALUE FieldDef_get(VALUE _self, VALUE msg_rb);
-VALUE FieldDef_set(VALUE _self, VALUE msg_rb, VALUE value);
+void FieldDescriptor_mark(void* _self);
+void FieldDescriptor_free(void* _self);
+VALUE FieldDescriptor_alloc(VALUE klass);
+void FieldDescriptor_register(VALUE module);
+FieldDescriptor* ruby_to_FieldDescriptor(VALUE value);
+VALUE FieldDescriptor_name(VALUE _self);
+VALUE FieldDescriptor_name_set(VALUE _self, VALUE str);
+VALUE FieldDescriptor_type(VALUE _self);
+VALUE FieldDescriptor_type_set(VALUE _self, VALUE type);
+VALUE FieldDescriptor_label(VALUE _self);
+VALUE FieldDescriptor_label_set(VALUE _self, VALUE label);
+VALUE FieldDescriptor_number(VALUE _self);
+VALUE FieldDescriptor_number_set(VALUE _self, VALUE number);
+VALUE FieldDescriptor_submsg_name(VALUE _self);
+VALUE FieldDescriptor_submsg_name_set(VALUE _self, VALUE value);
+VALUE FieldDescriptor_subtype(VALUE _self);
+VALUE FieldDescriptor_get(VALUE _self, VALUE msg_rb);
+VALUE FieldDescriptor_set(VALUE _self, VALUE msg_rb, VALUE value);
 upb_fieldtype_t ruby_to_fieldtype(VALUE type);
 VALUE fieldtype_to_ruby(upb_fieldtype_t type);
 
-void EnumDef_mark(void* _self);
-void EnumDef_free(void* _self);
-VALUE EnumDef_alloc(VALUE klass);
-void EnumDef_register(VALUE module);
-EnumDef* ruby_to_EnumDef(VALUE value);
-VALUE EnumDef_name(VALUE _self);
-VALUE EnumDef_name_set(VALUE _self, VALUE str);
-VALUE EnumDef_add_value(VALUE _self, VALUE name, VALUE number);
-VALUE EnumDef_lookup_name(VALUE _self, VALUE name);
-VALUE EnumDef_lookup_value(VALUE _self, VALUE number);
-VALUE EnumDef_values(VALUE _self);
-VALUE EnumDef_enummodule(VALUE _self);
-extern const rb_data_type_t _EnumDef_type;
+void EnumDescriptor_mark(void* _self);
+void EnumDescriptor_free(void* _self);
+VALUE EnumDescriptor_alloc(VALUE klass);
+void EnumDescriptor_register(VALUE module);
+EnumDescriptor* ruby_to_EnumDescriptor(VALUE value);
+VALUE EnumDescriptor_name(VALUE _self);
+VALUE EnumDescriptor_name_set(VALUE _self, VALUE str);
+VALUE EnumDescriptor_add_value(VALUE _self, VALUE name, VALUE number);
+VALUE EnumDescriptor_lookup_name(VALUE _self, VALUE name);
+VALUE EnumDescriptor_lookup_value(VALUE _self, VALUE number);
+VALUE EnumDescriptor_values(VALUE _self);
+VALUE EnumDescriptor_enummodule(VALUE _self);
+extern const rb_data_type_t _EnumDescriptor_type;
 
 void MessageBuilderContext_mark(void* _self);
 void MessageBuilderContext_free(void* _self);
 VALUE MessageBuilderContext_alloc(VALUE klass);
 void MessageBuilderContext_register(VALUE module);
 MessageBuilderContext* ruby_to_MessageBuilderContext(VALUE value);
-VALUE MessageBuilderContext_initialize(VALUE _self, VALUE msgdef);
+VALUE MessageBuilderContext_initialize(VALUE _self, VALUE descriptor);
 VALUE MessageBuilderContext_optional(int argc, VALUE* argv, VALUE _self);
 VALUE MessageBuilderContext_required(int argc, VALUE* argv, VALUE _self);
 VALUE MessageBuilderContext_repeated(int argc, VALUE* argv, VALUE _self);
@@ -192,7 +192,7 @@ void EnumBuilderContext_free(void* _self);
 VALUE EnumBuilderContext_alloc(VALUE klass);
 void EnumBuilderContext_register(VALUE module);
 EnumBuilderContext* ruby_to_EnumBuilderContext(VALUE value);
-VALUE EnumBuilderContext_initialize(VALUE _self, VALUE enumdef);
+VALUE EnumBuilderContext_initialize(VALUE _self, VALUE enumdesc);
 VALUE EnumBuilderContext_value(VALUE _self, VALUE name, VALUE number);
 
 void Builder_mark(void* _self);
@@ -202,7 +202,7 @@ void Builder_register(VALUE module);
 Builder* ruby_to_Builder(VALUE value);
 VALUE Builder_add_message(VALUE _self, VALUE name);
 VALUE Builder_add_enum(VALUE _self, VALUE name);
-VALUE Builder_finalize_to_symtab(VALUE _self, VALUE symtab_rb);
+VALUE Builder_finalize_to_pool(VALUE _self, VALUE pool_rb);
 
 // -----------------------------------------------------------------------------
 // Native slot storage abstraction.
@@ -292,14 +292,14 @@ VALUE layout_inspect(MessageLayout* layout, void* storage);
 // -----------------------------------------------------------------------------
 
 struct MessageHeader {
-  VALUE msgdef_rb;
-  MessageDef* msgdef;  // kept alive by msgdef_rb reference.
+  VALUE descriptor_rb;
+  Descriptor* descriptor;  // kept alive by descriptor_rb reference.
   // Data comes after this.
 };
 
 extern rb_data_type_t Message_type;
 
-VALUE build_class_from_msgdef(MessageDef* msgdef);
+VALUE build_class_from_descriptor(Descriptor* descriptor);
 void* Message_data(void* msg);
 void Message_mark(void* self);
 void Message_free(void* self);
@@ -314,15 +314,15 @@ VALUE Message_descriptor(VALUE klass);
 VALUE Message_decode(VALUE klass, VALUE data);
 VALUE Message_encode(VALUE klass, VALUE msg_rb);
 
-VALUE build_module_from_enumdef(EnumDef* enumdef);
+VALUE build_module_from_enumdesc(EnumDescriptor* enumdef);
 VALUE enum_lookup(VALUE self, VALUE number);
 VALUE enum_resolve(VALUE self, VALUE sym);
 
 const upb_pbdecodermethod *new_fillmsg_decodermethod(
-    MessageDef* msgdef, const void *owner);
+    Descriptor* descriptor, const void *owner);
 
 // -----------------------------------------------------------------------------
-// Global map from upb {msg,enum}defs to wrapper MessageDef/EnumDef instances.
+// Global map from upb {msg,enum}defs to wrapper Descriptor/EnumDescriptor instances.
 // -----------------------------------------------------------------------------
 void add_def_obj(void* def, VALUE value);
 VALUE get_def_obj(void* def);

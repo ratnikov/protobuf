@@ -31,7 +31,8 @@
 #include "protobuf.h"
 
 // -----------------------------------------------------------------------------
-// Global map from upb {msg,enum}defs to wrapper MessageDef/EnumDef instances.
+// Global map from upb {msg,enum}defs to wrapper Descriptor/EnumDescriptor
+// instances.
 // -----------------------------------------------------------------------------
 
 // This is a hash table from def objects (encoded by converting pointers to
@@ -50,10 +51,10 @@ void Init_protobuf_c() {
   VALUE google = rb_define_module("Google");
   VALUE protobuf = rb_define_module_under(google, "Protobuf");
   VALUE internal = rb_define_module_under(protobuf, "Internal");
-  SymbolTable_register(protobuf);
-  MessageDef_register(protobuf);
-  FieldDef_register(protobuf);
-  EnumDef_register(protobuf);
+  DescriptorPool_register(protobuf);
+  Descriptor_register(protobuf);
+  FieldDescriptor_register(protobuf);
+  EnumDescriptor_register(protobuf);
   MessageBuilderContext_register(internal);
   EnumBuilderContext_register(internal);
   Builder_register(internal);

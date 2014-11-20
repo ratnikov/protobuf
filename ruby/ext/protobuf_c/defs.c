@@ -31,7 +31,7 @@
 #include "protobuf.h"
 
 // -----------------------------------------------------------------------------
-// SymbolTable.
+// DescriptorPool.
 // -----------------------------------------------------------------------------
 
 #define DEFINE_CLASS(name, string_name)                             \
@@ -49,83 +49,84 @@
 #define SELF(type)                                                  \
     type* self = ruby_to_ ## type(_self);
 
-// Global singleton SymbolTable. The user is free to create others, but this is
-// used by generated code.
-VALUE global_symtab;
+// Global singleton DescriptorPool. The user is free to create others, but this
+// is used by generated code.
+VALUE global_pool;
 
-DEFINE_CLASS(SymbolTable, "Google::Protobuf::SymbolTable");
+DEFINE_CLASS(DescriptorPool, "Google::Protobuf::DescriptorPool");
 
-void SymbolTable_mark(void* _self) {
+void DescriptorPool_mark(void* _self) {
 }
 
-void SymbolTable_free(void* _self) {
-  SymbolTable* self = _self;
+void DescriptorPool_free(void* _self) {
+  DescriptorPool* self = _self;
   upb_symtab_unref(self->symtab, &self->symtab);
   xfree(self);
 }
 
-VALUE SymbolTable_alloc(VALUE klass) {
-  SymbolTable* self = ALLOC(SymbolTable);
+VALUE DescriptorPool_alloc(VALUE klass) {
+  DescriptorPool* self = ALLOC(DescriptorPool);
   self->symtab = upb_symtab_new(&self->symtab);
-  self->_value = TypedData_Wrap_Struct(klass, &_SymbolTable_type, self);
+  self->_value = TypedData_Wrap_Struct(klass, &_DescriptorPool_type, self);
   return self->_value;
 }
 
-void SymbolTable_register(VALUE module) {
+void DescriptorPool_register(VALUE module) {
   VALUE klass = rb_define_class_under(
-      module, "SymbolTable", rb_cObject);
-  rb_define_alloc_func(klass, SymbolTable_alloc);
-  rb_define_method(klass, "add", SymbolTable_add, 1);
-  rb_define_method(klass, "build", SymbolTable_build, 0);
-  rb_define_method(klass, "lookup", SymbolTable_lookup, 1);
-  rb_define_method(klass, "get_class", SymbolTable_get_class, 1);
-  rb_define_method(klass, "get_enum", SymbolTable_get_enum, 1);
-  rb_define_singleton_method(klass, "global_symtab",
-                             SymbolTable_global_symtab, 0);
-  cSymbolTable = klass;
-  rb_gc_register_address(&cSymbolTable);
+      module, "DescriptorPool", rb_cObject);
+  rb_define_alloc_func(klass, DescriptorPool_alloc);
+  rb_define_method(klass, "add", DescriptorPool_add, 1);
+  rb_define_method(klass, "build", DescriptorPool_build, 0);
+  rb_define_method(klass, "lookup", DescriptorPool_lookup, 1);
+  rb_define_method(klass, "get_class", DescriptorPool_get_class, 1);
+  rb_define_method(klass, "get_enum", DescriptorPool_get_enum, 1);
+  rb_define_singleton_method(klass, "global_pool",
+                             DescriptorPool_global_pool, 0);
+  cDescriptorPool = klass;
+  rb_gc_register_address(&cDescriptorPool);
 
-  global_symtab = rb_class_new_instance(0, NULL, klass);
-  rb_gc_register_address(&global_symtab);
+  global_pool = rb_class_new_instance(0, NULL, klass);
+  rb_gc_register_address(&global_pool);
 }
 
-static void add_msgdef_to_symtab(SymbolTable* self, MessageDef* msgdef) {
+static void add_descriptor_to_pool(DescriptorPool* self, Descriptor* descriptor) {
   upb_status s = UPB_STATUS_INIT;
-  upb_symtab_add(self->symtab, (upb_def**)&msgdef->msgdef, 1, NULL, &s);
+  upb_symtab_add(self->symtab, (upb_def**)&descriptor->msgdef, 1, NULL, &s);
   if (!upb_ok(&s)) {
-    rb_raise(rb_eRuntimeError, "Adding MessageDef to SymbolTable failed.");
+    rb_raise(rb_eRuntimeError, "Adding Descriptor to DescriptorPool failed.");
   }
-  add_def_obj(msgdef->msgdef, msgdef->_value);
+  add_def_obj(descriptor->msgdef, descriptor->_value);
 }
 
-static void add_enumdef_to_symtab(SymbolTable* self, EnumDef* enumdef) {
+static void add_enumdesc_to_pool(DescriptorPool* self,
+                                 EnumDescriptor* enumdesc) {
   upb_status s = UPB_STATUS_INIT;
-  upb_symtab_add(self->symtab, (upb_def**)&enumdef->enumdef, 1, NULL, &s);
+  upb_symtab_add(self->symtab, (upb_def**)&enumdesc->enumdef, 1, NULL, &s);
   if (!upb_ok(&s)) {
-    rb_raise(rb_eRuntimeError, "Adding EnumDef to SymbolTable failed.");
+    rb_raise(rb_eRuntimeError, "Adding EnumDescriptor to DescriptorPool failed.");
   }
-  add_def_obj(enumdef->enumdef, enumdef->_value);
+  add_def_obj(enumdesc->enumdef, enumdesc->_value);
 }
 
-VALUE SymbolTable_add(VALUE _self, VALUE def) {
-  SELF(SymbolTable);
+VALUE DescriptorPool_add(VALUE _self, VALUE def) {
+  SELF(DescriptorPool);
   VALUE def_klass = rb_obj_class(def);
-  if (def_klass == cMessageDef) {
-    add_msgdef_to_symtab(self, ruby_to_MessageDef(def));
-  } else if (def_klass == cEnumDef) {
-    add_enumdef_to_symtab(self, ruby_to_EnumDef(def));
+  if (def_klass == cDescriptor) {
+    add_descriptor_to_pool(self, ruby_to_Descriptor(def));
+  } else if (def_klass == cEnumDescriptor) {
+    add_enumdesc_to_pool(self, ruby_to_EnumDescriptor(def));
   } else {
     rb_raise(rb_eArgError,
-             "Second argument must be a MessageDef or EnumDef.");
+             "Second argument must be a Descriptor or EnumDescriptor.");
   }
   return Qnil;
 }
 
-VALUE SymbolTable_build(VALUE _self) {
+VALUE DescriptorPool_build(VALUE _self) {
   VALUE ctx = rb_class_new_instance(0, NULL, cBuilder);
   VALUE block = rb_block_proc();
   rb_funcall_with_block(ctx, rb_intern("instance_eval"), 0, NULL, block);
-  rb_funcall(ctx, rb_intern("finalize_to_symtab"), 1, _self);
+  rb_funcall(ctx, rb_intern("finalize_to_pool"), 1, _self);
   return Qnil;
 }
 
@@ -136,8 +137,8 @@ static const char* get_str(VALUE str) {
   return RSTRING_PTR(str);
 }
 
-VALUE SymbolTable_lookup(VALUE _self, VALUE name) {
-  SELF(SymbolTable);
+VALUE DescriptorPool_lookup(VALUE _self, VALUE name) {
+  SELF(DescriptorPool);
   const char* name_str = get_str(name);
   const upb_def* def = upb_symtab_lookup(self->symtab, name_str);
   if (!def) {
@@ -146,55 +147,55 @@ VALUE SymbolTable_lookup(VALUE _self, VALUE name) {
   return get_def_obj((void*)def);
 }
 
-VALUE SymbolTable_get_class(VALUE _self, VALUE name) {
-  VALUE def_rb = SymbolTable_lookup(_self, name);
+VALUE DescriptorPool_get_class(VALUE _self, VALUE name) {
+  VALUE def_rb = DescriptorPool_lookup(_self, name);
   if (def_rb == Qnil) {
     return Qnil;
   }
-  if (CLASS_OF(def_rb) != cMessageDef) {
+  if (CLASS_OF(def_rb) != cDescriptor) {
     rb_raise(rb_eTypeError, "Name does not name a message type.");
   }
-  MessageDef* msgdef = ruby_to_MessageDef(def_rb);
-  if (msgdef->klass == Qnil) {
-    msgdef->klass = build_class_from_msgdef(msgdef);
+  Descriptor* desc = ruby_to_Descriptor(def_rb);
+  if (desc->klass == Qnil) {
+    desc->klass = build_class_from_descriptor(desc);
   }
-  return msgdef->klass;
+  return desc->klass;
 }
 
-VALUE SymbolTable_get_enum(VALUE _self, VALUE name) {
-  VALUE def_rb = SymbolTable_lookup(_self, name);
+VALUE DescriptorPool_get_enum(VALUE _self, VALUE name) {
+  VALUE def_rb = DescriptorPool_lookup(_self, name);
   if (def_rb == Qnil) {
     return Qnil;
   }
-  if (CLASS_OF(def_rb) != cEnumDef) {
+  if (CLASS_OF(def_rb) != cEnumDescriptor) {
     rb_raise(rb_eTypeError, "Name does not name an enum type.");
   }
-  EnumDef* enumdef = ruby_to_EnumDef(def_rb);
-  if (enumdef->module == Qnil) {
-    enumdef->module = build_module_from_enumdef(enumdef);
+  EnumDescriptor* enumdesc = ruby_to_EnumDescriptor(def_rb);
+  if (enumdesc->module == Qnil) {
+    enumdesc->module = build_module_from_enumdesc(enumdesc);
   }
-  return enumdef->module;
+  return enumdesc->module;
 }
 
-VALUE SymbolTable_global_symtab(VALUE _self) {
-  return global_symtab;
+VALUE DescriptorPool_global_pool(VALUE _self) {
+  return global_pool;
 }
 
 // -----------------------------------------------------------------------------
-// MessageDef.
+// Descriptor.
 // -----------------------------------------------------------------------------
 
-DEFINE_CLASS(MessageDef, "Google::Protobuf::MessageDef");
+DEFINE_CLASS(Descriptor, "Google::Protobuf::Descriptor");
 
-void MessageDef_mark(void* _self) {
-  MessageDef* self = _self;
+void Descriptor_mark(void* _self) {
+  Descriptor* self = _self;
   rb_gc_mark(self->klass);
   rb_gc_mark(self->fields);
   rb_gc_mark(self->field_map);
 }
 
-void MessageDef_free(void* _self) {
-  MessageDef* self = _self;
+void Descriptor_free(void* _self) {
+  Descriptor* self = _self;
   upb_msgdef_unref(self->msgdef, &self->msgdef);
   if (self->layout) {
     free_layout(self->layout);
@@ -208,9 +209,9 @@ void MessageDef_free(void* _self) {
   xfree(self);
 }
 
-VALUE MessageDef_alloc(VALUE klass) {
-  MessageDef* self = ALLOC(MessageDef);
-  self->_value = TypedData_Wrap_Struct(klass, &_MessageDef_type, self);
+VALUE Descriptor_alloc(VALUE klass) {
+  Descriptor* self = ALLOC(Descriptor);
+  self->_value = TypedData_Wrap_Struct(klass, &_Descriptor_type, self);
   self->msgdef = upb_msgdef_new(&self->msgdef);
   self->klass = Qnil;
   self->fields = rb_ary_new();
@@ -221,22 +222,22 @@ VALUE MessageDef_alloc(VALUE klass) {
   return self->_value;
 }
 
-void MessageDef_register(VALUE module) {
+void Descriptor_register(VALUE module) {
   VALUE klass = rb_define_class_under(
-      module, "MessageDef", rb_cObject);
-  rb_define_alloc_func(klass, MessageDef_alloc);
-  rb_define_method(klass, "fields", MessageDef_fields, 0);
-  rb_define_method(klass, "lookup", MessageDef_lookup, 1);
-  rb_define_method(klass, "add_field", MessageDef_add_field, 1);
-  rb_define_method(klass, "msgclass", MessageDef_msgclass, 0);
-  rb_define_method(klass, "name", MessageDef_name, 0);
-  rb_define_method(klass, "name=", MessageDef_name_set, 1);
-  cMessageDef = klass;
-  rb_gc_register_address(&cMessageDef);
+      module, "Descriptor", rb_cObject);
+  rb_define_alloc_func(klass, Descriptor_alloc);
+  rb_define_method(klass, "fields", Descriptor_fields, 0);
+  rb_define_method(klass, "lookup", Descriptor_lookup, 1);
+  rb_define_method(klass, "add_field", Descriptor_add_field, 1);
+  rb_define_method(klass, "msgclass", Descriptor_msgclass, 0);
+  rb_define_method(klass, "name", Descriptor_name, 0);
+  rb_define_method(klass, "name=", Descriptor_name_set, 1);
+  cDescriptor = klass;
+  rb_gc_register_address(&cDescriptor);
 }
 
-VALUE MessageDef_name(VALUE _self) {
-  SELF(MessageDef);
+VALUE Descriptor_name(VALUE _self) {
+  SELF(Descriptor);
   const char* s = upb_msgdef_fullname(self->msgdef);
   if (s == NULL) {
     s = "";
@@ -244,38 +245,38 @@ VALUE MessageDef_name(VALUE _self) {
   return rb_str_new2(s);
 }
 
-VALUE MessageDef_name_set(VALUE _self, VALUE str) {
-  SELF(MessageDef);
+VALUE Descriptor_name_set(VALUE _self, VALUE str) {
+  SELF(Descriptor);
   const char* name = get_str(str);
   upb_status s = UPB_STATUS_INIT;
   upb_msgdef_setfullname(self->msgdef, name, &s);
   if (!upb_ok(&s)) {
-    rb_raise(rb_eRuntimeError, "Error setting MessageDef name.");
+    rb_raise(rb_eRuntimeError, "Error setting Descriptor name.");
   }
   return Qnil;
 }
 
-VALUE MessageDef_fields(VALUE _self) {
-  SELF(MessageDef);
+VALUE Descriptor_fields(VALUE _self) {
+  SELF(Descriptor);
   return self->fields;
 }
 
-VALUE MessageDef_lookup(VALUE _self, VALUE name) {
-  SELF(MessageDef);
+VALUE Descriptor_lookup(VALUE _self, VALUE name) {
+  SELF(Descriptor);
   return rb_hash_aref(self->field_map, name);
 }
 
-VALUE MessageDef_add_field(VALUE _self, VALUE obj) {
-  SELF(MessageDef);
+VALUE Descriptor_add_field(VALUE _self, VALUE obj) {
+  SELF(Descriptor);
   VALUE obj_klass = rb_obj_class(obj);
-  if (obj_klass != cFieldDef) {
-    rb_raise(rb_eTypeError, "add_field expects a FieldDef instance.");
+  if (obj_klass != cFieldDescriptor) {
+    rb_raise(rb_eTypeError, "add_field expects a FieldDescriptor instance.");
   }
-  FieldDef* def = ruby_to_FieldDef(obj);
+  FieldDescriptor* def = ruby_to_FieldDescriptor(obj);
   upb_status s = UPB_STATUS_INIT;
   upb_msgdef_addfield(self->msgdef, def->fielddef, NULL, &s);
   if (!upb_ok(&s)) {
-    rb_raise(rb_eRuntimeError, "Adding field to MessageDef failed.");
+    rb_raise(rb_eRuntimeError, "Adding field to Descriptor failed.");
   }
   rb_ary_push(self->fields, obj);
   rb_hash_aset(self->field_map,
@@ -284,57 +285,57 @@ VALUE MessageDef_add_field(VALUE _self, VALUE obj) {
   return Qnil;
 }
 
-VALUE MessageDef_msgclass(VALUE _self) {
-  SELF(MessageDef);
+VALUE Descriptor_msgclass(VALUE _self) {
+  SELF(Descriptor);
   return self->klass;
 }
 
 // -----------------------------------------------------------------------------
-// FieldDef.
+// FieldDescriptor.
 // -----------------------------------------------------------------------------
 
-DEFINE_CLASS(FieldDef, "Google::Protobuf::FieldDef");
+DEFINE_CLASS(FieldDescriptor, "Google::Protobuf::FieldDescriptor");
 
-void FieldDef_mark(void* _self) {
+void FieldDescriptor_mark(void* _self) {
 }
 
-void FieldDef_free(void* _self) {
-  FieldDef* self = _self;
+void FieldDescriptor_free(void* _self) {
+  FieldDescriptor* self = _self;
   upb_fielddef_unref(self->fielddef, &self->fielddef);
   xfree(self);
 }
 
-VALUE FieldDef_alloc(VALUE klass) {
-  FieldDef* self = ALLOC(FieldDef);
-  self->_value = TypedData_Wrap_Struct(klass, &_FieldDef_type, self);
+VALUE FieldDescriptor_alloc(VALUE klass) {
+  FieldDescriptor* self = ALLOC(FieldDescriptor);
+  self->_value = TypedData_Wrap_Struct(klass, &_FieldDescriptor_type, self);
   self->fielddef = upb_fielddef_new(&self->fielddef);
   upb_fielddef_setpacked(self->fielddef, false);
   return self->_value;
 }
 
-void FieldDef_register(VALUE module) {
+void FieldDescriptor_register(VALUE module) {
   VALUE klass = rb_define_class_under(
-      module, "FieldDef", rb_cObject);
-  rb_define_alloc_func(klass, FieldDef_alloc);
-  rb_define_method(klass, "name", FieldDef_name, 0);
-  rb_define_method(klass, "name=", FieldDef_name_set, 1);
-  rb_define_method(klass, "type", FieldDef_type, 0);
-  rb_define_method(klass, "type=", FieldDef_type_set, 1);
-  rb_define_method(klass, "label", FieldDef_label, 0);
-  rb_define_method(klass, "label=", FieldDef_label_set, 1);
-  rb_define_method(klass, "number", FieldDef_number, 0);
-  rb_define_method(klass, "number=", FieldDef_number_set, 1);
-  rb_define_method(klass, "submsg_name", FieldDef_submsg_name, 0);
-  rb_define_method(klass, "submsg_name=", FieldDef_submsg_name_set, 1);
-  rb_define_method(klass, "subtype", FieldDef_subtype, 0);
-  rb_define_method(klass, "get", FieldDef_get, 1);
-  rb_define_method(klass, "set", FieldDef_set, 2);
-  cFieldDef = klass;
-  rb_gc_register_address(&cFieldDef);
+      module, "FieldDescriptor", rb_cObject);
+  rb_define_alloc_func(klass, FieldDescriptor_alloc);
+  rb_define_method(klass, "name", FieldDescriptor_name, 0);
+  rb_define_method(klass, "name=", FieldDescriptor_name_set, 1);
+  rb_define_method(klass, "type", FieldDescriptor_type, 0);
+  rb_define_method(klass, "type=", FieldDescriptor_type_set, 1);
+  rb_define_method(klass, "label", FieldDescriptor_label, 0);
+  rb_define_method(klass, "label=", FieldDescriptor_label_set, 1);
+  rb_define_method(klass, "number", FieldDescriptor_number, 0);
+  rb_define_method(klass, "number=", FieldDescriptor_number_set, 1);
+  rb_define_method(klass, "submsg_name", FieldDescriptor_submsg_name, 0);
+  rb_define_method(klass, "submsg_name=", FieldDescriptor_submsg_name_set, 1);
+  rb_define_method(klass, "subtype", FieldDescriptor_subtype, 0);
+  rb_define_method(klass, "get", FieldDescriptor_get, 1);
+  rb_define_method(klass, "set", FieldDescriptor_set, 2);
+  cFieldDescriptor = klass;
+  rb_gc_register_address(&cFieldDescriptor);
 }
 
-VALUE FieldDef_name(VALUE _self) {
-  SELF(FieldDef);
+VALUE FieldDescriptor_name(VALUE _self) {
+  SELF(FieldDescriptor);
   const char* s = upb_fielddef_name(self->fielddef);
   if (s == NULL) {
     s = "";
@@ -342,13 +343,13 @@ VALUE FieldDef_name(VALUE _self) {
   return rb_str_new2(s);
 }
 
-VALUE FieldDef_name_set(VALUE _self, VALUE str) {
-  SELF(FieldDef);
+VALUE FieldDescriptor_name_set(VALUE _self, VALUE str) {
+  SELF(FieldDescriptor);
   const char* name = get_str(str);
   upb_status s = UPB_STATUS_INIT;
   upb_fielddef_setname(self->fielddef, name, &s);
   if (!upb_ok(&s)) {
-    rb_raise(rb_eRuntimeError, "Error setting FieldDef name.");
+    rb_raise(rb_eRuntimeError, "Error setting FieldDescriptor name.");
   }
   return Qnil;
 }
@@ -406,22 +407,22 @@ VALUE fieldtype_to_ruby(upb_fieldtype_t type) {
   return Qnil;
 }
 
-VALUE FieldDef_type(VALUE _self) {
-  SELF(FieldDef);
+VALUE FieldDescriptor_type(VALUE _self) {
+  SELF(FieldDescriptor);
   if (!upb_fielddef_typeisset(self->fielddef)) {
     return Qnil;
   }
   return fieldtype_to_ruby(upb_fielddef_type(self->fielddef));
 }
 
-VALUE FieldDef_type_set(VALUE _self, VALUE type) {
-  SELF(FieldDef);
+VALUE FieldDescriptor_type_set(VALUE _self, VALUE type) {
+  SELF(FieldDescriptor);
   upb_fielddef_settype(self->fielddef, ruby_to_fieldtype(type));
   return Qnil;
 }
 
-VALUE FieldDef_label(VALUE _self) {
-  SELF(FieldDef);
+VALUE FieldDescriptor_label(VALUE _self) {
+  SELF(FieldDescriptor);
   switch (upb_fielddef_label(self->fielddef)) {
 #define CONVERT(upb, ruby)                                           \
     case UPB_LABEL_ ## upb : return ID2SYM(rb_intern( # ruby ));
@@ -436,8 +437,8 @@ VALUE FieldDef_label(VALUE _self) {
   return Qnil;
 }
 
-VALUE FieldDef_label_set(VALUE _self, VALUE label) {
-  SELF(FieldDef);
+VALUE FieldDescriptor_label_set(VALUE _self, VALUE label) {
+  SELF(FieldDescriptor);
   if (TYPE(label) != T_SYMBOL) {
     rb_raise(rb_eArgError, "Expected symbol for field label.");
   }
@@ -464,13 +465,13 @@ VALUE FieldDef_label_set(VALUE _self, VALUE label) {
   return Qnil;
 }
 
-VALUE FieldDef_number(VALUE _self) {
-  SELF(FieldDef);
+VALUE FieldDescriptor_number(VALUE _self) {
+  SELF(FieldDescriptor);
   return INT2NUM(upb_fielddef_number(self->fielddef));
 }
 
-VALUE FieldDef_number_set(VALUE _self, VALUE number) {
-  SELF(FieldDef);
+VALUE FieldDescriptor_number_set(VALUE _self, VALUE number) {
+  SELF(FieldDescriptor);
   upb_status s = UPB_STATUS_INIT;
   upb_fielddef_setnumber(self->fielddef, NUM2INT(number), &s);
   if (!upb_ok(&s)) {
@@ -479,8 +480,8 @@ VALUE FieldDef_number_set(VALUE _self, VALUE number) {
   return Qnil;
 }
 
-VALUE FieldDef_submsg_name(VALUE _self) {
-  SELF(FieldDef);
+VALUE FieldDescriptor_submsg_name(VALUE _self) {
+  SELF(FieldDescriptor);
   if (!upb_fielddef_hassubdef(self->fielddef)) {
     return Qnil;
   }
@@ -491,10 +492,10 @@ VALUE FieldDef_submsg_name(VALUE _self) {
   return rb_str_new2(s);
 }
 
-VALUE FieldDef_submsg_name_set(VALUE _self, VALUE value) {
-  SELF(FieldDef);
+VALUE FieldDescriptor_submsg_name_set(VALUE _self, VALUE value) {
+  SELF(FieldDescriptor);
   if (!upb_fielddef_hassubdef(self->fielddef)) {
-    rb_raise(rb_eTypeError, "FieldDef does not have subdef.");
+    rb_raise(rb_eTypeError, "FieldDescriptor does not have subdef.");
   }
   const char* str = get_str(value);
   upb_status s = UPB_STATUS_INIT;
@@ -505,8 +506,8 @@ VALUE FieldDef_submsg_name_set(VALUE _self, VALUE value) {
   return Qnil;
 }
 
-VALUE FieldDef_subtype(VALUE _self) {
-  SELF(FieldDef);
+VALUE FieldDescriptor_subtype(VALUE _self) {
+  SELF(FieldDescriptor);
   if (!upb_fielddef_hassubdef(self->fielddef)) {
     return Qnil;
   }
@@ -517,69 +518,69 @@ VALUE FieldDef_subtype(VALUE _self) {
   return get_def_obj((void*)def);
 }
 
-VALUE FieldDef_get(VALUE _self, VALUE msg_rb) {
-  SELF(FieldDef);
+VALUE FieldDescriptor_get(VALUE _self, VALUE msg_rb) {
+  SELF(FieldDescriptor);
   MessageHeader* msg;
   TypedData_Get_Struct(msg_rb, MessageHeader, &Message_type, msg);
-  if (msg->msgdef->msgdef != upb_fielddef_containingtype(self->fielddef)) {
+  if (msg->descriptor->msgdef != upb_fielddef_containingtype(self->fielddef)) {
     rb_raise(rb_eTypeError, "get method called on wrong message type");
   }
-  return layout_get(msg->msgdef->layout, Message_data(msg), self->fielddef);
+  return layout_get(msg->descriptor->layout, Message_data(msg), self->fielddef);
 }
 
-VALUE FieldDef_set(VALUE _self, VALUE msg_rb, VALUE value) {
-  SELF(FieldDef);
+VALUE FieldDescriptor_set(VALUE _self, VALUE msg_rb, VALUE value) {
+  SELF(FieldDescriptor);
   MessageHeader* msg;
   TypedData_Get_Struct(msg_rb, MessageHeader, &Message_type, msg);
-  if (msg->msgdef->msgdef != upb_fielddef_containingtype(self->fielddef)) {
+  if (msg->descriptor->msgdef != upb_fielddef_containingtype(self->fielddef)) {
     rb_raise(rb_eTypeError, "set method called on wrong message type");
   }
-  layout_set(msg->msgdef->layout, Message_data(msg), self->fielddef, value);
+  layout_set(msg->descriptor->layout, Message_data(msg), self->fielddef, value);
   return Qnil;
 }
 
 // -----------------------------------------------------------------------------
-// EnumDef.
+// EnumDescriptor.
 // -----------------------------------------------------------------------------
 
-DEFINE_CLASS(EnumDef, "Google::Protobuf::EnumDef");
+DEFINE_CLASS(EnumDescriptor, "Google::Protobuf::EnumDescriptor");
 
-void EnumDef_mark(void* _self) {
-  EnumDef* self = _self;
+void EnumDescriptor_mark(void* _self) {
+  EnumDescriptor* self = _self;
   rb_gc_mark(self->module);
 }
 
-void EnumDef_free(void* _self) {
-  EnumDef* self = _self;
+void EnumDescriptor_free(void* _self) {
+  EnumDescriptor* self = _self;
   upb_enumdef_unref(self->enumdef, &self->enumdef);
   xfree(self);
 }
 
-VALUE EnumDef_alloc(VALUE klass) {
-  EnumDef* self = ALLOC(EnumDef);
-  self->_value = TypedData_Wrap_Struct(klass, &_EnumDef_type, self);
+VALUE EnumDescriptor_alloc(VALUE klass) {
+  EnumDescriptor* self = ALLOC(EnumDescriptor);
+  self->_value = TypedData_Wrap_Struct(klass, &_EnumDescriptor_type, self);
   self->enumdef = upb_enumdef_new(&self->enumdef);
   self->module = Qnil;
   return self->_value;
 }
 
-void EnumDef_register(VALUE module) {
+void EnumDescriptor_register(VALUE module) {
   VALUE klass = rb_define_class_under(
-      module, "EnumDef", rb_cObject);
-  rb_define_alloc_func(klass, EnumDef_alloc);
-  rb_define_method(klass, "name", EnumDef_name, 0);
-  rb_define_method(klass, "name=", EnumDef_name_set, 1);
-  rb_define_method(klass, "add_value", EnumDef_add_value, 2);
-  rb_define_method(klass, "lookup_name", EnumDef_lookup_name, 1);
-  rb_define_method(klass, "lookup_value", EnumDef_lookup_value, 1);
-  rb_define_method(klass, "values", EnumDef_values, 0);
-  rb_define_method(klass, "enummodule", EnumDef_enummodule, 0);
-  cEnumDef = klass;
-  rb_gc_register_address(&cEnumDef);
+      module, "EnumDescriptor", rb_cObject);
+  rb_define_alloc_func(klass, EnumDescriptor_alloc);
+  rb_define_method(klass, "name", EnumDescriptor_name, 0);
+  rb_define_method(klass, "name=", EnumDescriptor_name_set, 1);
+  rb_define_method(klass, "add_value", EnumDescriptor_add_value, 2);
+  rb_define_method(klass, "lookup_name", EnumDescriptor_lookup_name, 1);
+  rb_define_method(klass, "lookup_value", EnumDescriptor_lookup_value, 1);
+  rb_define_method(klass, "values", EnumDescriptor_values, 0);
+  rb_define_method(klass, "enummodule", EnumDescriptor_enummodule, 0);
+  cEnumDescriptor = klass;
+  rb_gc_register_address(&cEnumDescriptor);
 }
 
-VALUE EnumDef_name(VALUE _self) {
-  SELF(EnumDef);
+VALUE EnumDescriptor_name(VALUE _self) {
+  SELF(EnumDescriptor);
   const char* s = upb_enumdef_fullname(self->enumdef);
   if (s == NULL) {
     s = "";
@@ -587,19 +588,19 @@ VALUE EnumDef_name(VALUE _self) {
   return rb_str_new2(s);
 }
 
-VALUE EnumDef_name_set(VALUE _self, VALUE str) {
-  SELF(EnumDef);
+VALUE EnumDescriptor_name_set(VALUE _self, VALUE str) {
+  SELF(EnumDescriptor);
   const char* name = get_str(str);
   upb_status s = UPB_STATUS_INIT;
   upb_enumdef_setfullname(self->enumdef, name, &s);
   if (!upb_ok(&s)) {
-    rb_raise(rb_eRuntimeError, "Error setting EnumDef name.");
+    rb_raise(rb_eRuntimeError, "Error setting EnumDescriptor name.");
   }
   return Qnil;
 }
 
-VALUE EnumDef_add_value(VALUE _self, VALUE name, VALUE number) {
-  SELF(EnumDef);
+VALUE EnumDescriptor_add_value(VALUE _self, VALUE name, VALUE number) {
+  SELF(EnumDescriptor);
   const char* name_str = rb_id2name(SYM2ID(name));
   int32_t val = NUM2INT(number);
   upb_status s = UPB_STATUS_INIT;
@@ -610,8 +611,8 @@ VALUE EnumDef_add_value(VALUE _self, VALUE name, VALUE number) {
   return Qnil;
 }
 
-VALUE EnumDef_lookup_name(VALUE _self, VALUE name) {
-  SELF(EnumDef);
+VALUE EnumDescriptor_lookup_name(VALUE _self, VALUE name) {
+  SELF(EnumDescriptor);
   const char* name_str= rb_id2name(SYM2ID(name));
   int32_t val = 0;
   if (upb_enumdef_ntoi(self->enumdef, name_str, &val)) {
@@ -621,8 +622,8 @@ VALUE EnumDef_lookup_name(VALUE _self, VALUE name) {
   }
 }
 
-VALUE EnumDef_lookup_value(VALUE _self, VALUE number) {
-  SELF(EnumDef);
+VALUE EnumDescriptor_lookup_value(VALUE _self, VALUE number) {
+  SELF(EnumDescriptor);
   int32_t val = NUM2INT(number);
   const char* name = upb_enumdef_iton(self->enumdef, val);
   if (name != NULL) {
@@ -632,8 +633,8 @@ VALUE EnumDef_lookup_value(VALUE _self, VALUE number) {
   }
 }
 
-VALUE EnumDef_values(VALUE _self) {
-  SELF(EnumDef);
+VALUE EnumDescriptor_values(VALUE _self) {
+  SELF(EnumDescriptor);
   VALUE ret = rb_hash_new();
 
   upb_enum_iter it;
@@ -648,8 +649,8 @@ VALUE EnumDef_values(VALUE _self) {
   return ret;
 }
 
-VALUE EnumDef_enummodule(VALUE _self) {
-  SELF(EnumDef);
+VALUE EnumDescriptor_enummodule(VALUE _self) {
+  SELF(EnumDescriptor);
   return self->module;
 }
 
@@ -662,7 +663,7 @@ DEFINE_CLASS(MessageBuilderContext,
 
 void MessageBuilderContext_mark(void* _self) {
   MessageBuilderContext* self = _self;
-  rb_gc_mark(self->msgdef);
+  rb_gc_mark(self->descriptor);
 }
 
 void MessageBuilderContext_free(void* _self) {
@@ -674,7 +675,7 @@ VALUE MessageBuilderContext_alloc(VALUE klass) {
   MessageBuilderContext* self = ALLOC(MessageBuilderContext);
   self->_value = TypedData_Wrap_Struct(
       klass, &_MessageBuilderContext_type, self);
-  self->msgdef = Qnil;
+  self->descriptor = Qnil;
   return self->_value;
 }
 
@@ -693,7 +694,7 @@ void MessageBuilderContext_register(VALUE module) {
 
 VALUE MessageBuilderContext_initialize(VALUE _self, VALUE msgdef) {
   SELF(MessageBuilderContext);
-  self->msgdef = msgdef;
+  self->descriptor = msgdef;
   return Qnil;
 }
 
@@ -701,7 +702,7 @@ static VALUE msgdef_add_field(VALUE msgdef,
                               const char* label, VALUE name,
                               VALUE type, VALUE number,
                               VALUE type_class) {
-  VALUE fielddef = rb_class_new_instance(0, NULL, cFieldDef);
+  VALUE fielddef = rb_class_new_instance(0, NULL, cFieldDescriptor);
   VALUE name_str = rb_str_new2(rb_id2name(SYM2ID(name)));
 
   rb_funcall(fielddef, rb_intern("label="), 1, ID2SYM(rb_intern(label)));
@@ -733,7 +734,8 @@ VALUE MessageBuilderContext_optional(int argc, VALUE* argv, VALUE _self) {
   VALUE number = argv[2];
   VALUE type_class = (argc > 3) ? argv[3] : Qnil;
 
-  return msgdef_add_field(self->msgdef, "optional", name, type, number, type_class);
+  return msgdef_add_field(self->descriptor, "optional",
+                          name, type, number, type_class);
 }
 
 VALUE MessageBuilderContext_required(int argc, VALUE* argv, VALUE _self) {
@@ -747,7 +749,8 @@ VALUE MessageBuilderContext_required(int argc, VALUE* argv, VALUE _self) {
   VALUE number = argv[2];
   VALUE type_class = (argc > 3) ? argv[3] : Qnil;
 
-  return msgdef_add_field(self->msgdef, "required", name, type, number, type_class);
+  return msgdef_add_field(self->descriptor, "required",
+                          name, type, number, type_class);
 }
 
 VALUE MessageBuilderContext_repeated(int argc, VALUE* argv, VALUE _self) {
@@ -761,7 +764,8 @@ VALUE MessageBuilderContext_repeated(int argc, VALUE* argv, VALUE _self) {
   VALUE number = argv[2];
   VALUE type_class = (argc > 3) ? argv[3] : Qnil;
 
-  return msgdef_add_field(self->msgdef, "repeated", name, type, number, type_class);
+  return msgdef_add_field(self->descriptor, "repeated",
+                          name, type, number, type_class);
 }
 
 // -----------------------------------------------------------------------------
@@ -773,7 +777,7 @@ DEFINE_CLASS(EnumBuilderContext,
 
 void EnumBuilderContext_mark(void* _self) {
   EnumBuilderContext* self = _self;
-  rb_gc_mark(self->enumdef);
+  rb_gc_mark(self->enumdesc);
 }
 
 void EnumBuilderContext_free(void* _self) {
@@ -785,7 +789,7 @@ VALUE EnumBuilderContext_alloc(VALUE klass) {
   EnumBuilderContext* self = ALLOC(EnumBuilderContext);
   self->_value = TypedData_Wrap_Struct(
       klass, &_EnumBuilderContext_type, self);
-  self->enumdef = Qnil;
+  self->enumdesc = Qnil;
   return self->_value;
 }
 
@@ -802,7 +806,7 @@ void EnumBuilderContext_register(VALUE module) {
 
 VALUE EnumBuilderContext_initialize(VALUE _self, VALUE enumdef) {
   SELF(EnumBuilderContext);
-  self->enumdef = enumdef;
+  self->enumdesc = enumdef;
   return Qnil;
 }
 
@@ -814,7 +818,7 @@ static VALUE enumdef_add_value(VALUE enumdef,
 
 VALUE EnumBuilderContext_value(VALUE _self, VALUE name, VALUE number) {
   SELF(EnumBuilderContext);
-  return enumdef_add_value(self->enumdef, name, number);
+  return enumdef_add_value(self->enumdesc, name, number);
 }
 
 // -----------------------------------------------------------------------------
@@ -846,14 +850,14 @@ void Builder_register(VALUE module) {
   rb_define_alloc_func(klass, Builder_alloc);
   rb_define_method(klass, "add_message", Builder_add_message, 1);
   rb_define_method(klass, "add_enum", Builder_add_enum, 1);
-  rb_define_method(klass, "finalize_to_symtab", Builder_finalize_to_symtab, 1);
+  rb_define_method(klass, "finalize_to_pool", Builder_finalize_to_pool, 1);
   cBuilder = klass;
   rb_gc_register_address(&cBuilder);
 }
 
 VALUE Builder_add_message(VALUE _self, VALUE name) {
   SELF(Builder);
-  VALUE msgdef = rb_class_new_instance(0, NULL, cMessageDef);
+  VALUE msgdef = rb_class_new_instance(0, NULL, cDescriptor);
   VALUE ctx = rb_class_new_instance(1, &msgdef, cMessageBuilderContext);
   VALUE block = rb_block_proc();
   rb_funcall(msgdef, rb_intern("name="), 1, name);
@@ -864,7 +868,7 @@ VALUE Builder_add_message(VALUE _self, VALUE name) {
 
 VALUE Builder_add_enum(VALUE _self, VALUE name) {
   SELF(Builder);
-  VALUE enumdef = rb_class_new_instance(0, NULL, cEnumDef);
+  VALUE enumdef = rb_class_new_instance(0, NULL, cEnumDescriptor);
   VALUE ctx = rb_class_new_instance(1, &enumdef, cEnumBuilderContext);
   VALUE block = rb_block_proc();
   rb_funcall(enumdef, rb_intern("name="), 1, name);
@@ -894,30 +898,30 @@ static void validate_enumdef(const upb_enumdef* enumdef) {
   }
 }
 
-VALUE Builder_finalize_to_symtab(VALUE _self, VALUE symtab_rb) {
+VALUE Builder_finalize_to_pool(VALUE _self, VALUE pool_rb) {
   SELF(Builder);
 
-  SymbolTable* symtab = ruby_to_SymbolTable(symtab_rb);
+  DescriptorPool* pool = ruby_to_DescriptorPool(pool_rb);
 
   upb_def** defs = ALLOC_N(upb_def*,
                            RARRAY_LEN(self->pending_list));
   for (int i = 0; i < RARRAY_LEN(self->pending_list); i++) {
     VALUE def_rb = rb_ary_entry(self->pending_list, i);
-    if (CLASS_OF(def_rb) == cMessageDef) {
-      defs[i] = (upb_def*)ruby_to_MessageDef(def_rb)->msgdef;
+    if (CLASS_OF(def_rb) == cDescriptor) {
+      defs[i] = (upb_def*)ruby_to_Descriptor(def_rb)->msgdef;
       validate_msgdef((const upb_msgdef*)defs[i]);
-    } else if (CLASS_OF(def_rb) == cEnumDef) {
-      defs[i] = (upb_def*)ruby_to_EnumDef(def_rb)->enumdef;
+    } else if (CLASS_OF(def_rb) == cEnumDescriptor) {
+      defs[i] = (upb_def*)ruby_to_EnumDescriptor(def_rb)->enumdef;
       validate_enumdef((const upb_enumdef*)defs[i]);
     }
   }
 
   upb_status s = UPB_STATUS_INIT;
-  upb_symtab_add(symtab->symtab, (upb_def**)defs,
+  upb_symtab_add(pool->symtab, (upb_def**)defs,
                  RARRAY_LEN(self->pending_list), NULL, &s);
   if (!upb_ok(&s)) {
     xfree(defs);
-    rb_raise(rb_eRuntimeError, "Unable to add defs to SymbolTable: %s",
+    rb_raise(rb_eRuntimeError, "Unable to add defs to DescriptorPool: %s",
              upb_status_errmsg(&s));
   }
 

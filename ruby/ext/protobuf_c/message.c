@@ -40,8 +40,8 @@ void* Message_data(void* msg) {
 
 void Message_mark(void* _self) {
   MessageHeader* self = (MessageHeader *)_self;
-  rb_gc_mark(self->msgdef_rb);
-  layout_mark(self->msgdef->layout, Message_data(self));
+  rb_gc_mark(self->descriptor_rb);
+  layout_mark(self->descriptor->layout, Message_data(self));
 }
 
 void Message_free(void* self) {
@@ -55,19 +55,19 @@ rb_data_type_t Message_type = {
 
 VALUE Message_alloc(VALUE klass) {
   VALUE descriptor = rb_iv_get(klass, "@descriptor");
-  MessageDef* def = ruby_to_MessageDef(descriptor);
+  Descriptor* desc = ruby_to_Descriptor(descriptor);
   MessageHeader* msg = (MessageHeader*)ALLOC_N(
-      uint8_t, sizeof(MessageHeader) + def->layout->size);
-  memset(Message_data(msg), 0, def->layout->size);
+      uint8_t, sizeof(MessageHeader) + desc->layout->size);
+  memset(Message_data(msg), 0, desc->layout->size);
 
   // We wrap first so that everything in the message object is GC-rooted in case
   // a collection happens during object creation in layout_init().
   VALUE ret = TypedData_Wrap_Struct(klass, &Message_type, msg);
-  msg->msgdef_rb = descriptor;
-  msg->msgdef = def;
+  msg->descriptor_rb = descriptor;
+  msg->descriptor = desc;
   rb_iv_set(ret, "@descriptor", descriptor);
 
-  layout_init(def->layout, Message_data(msg));
+  layout_init(desc->layout, Message_data(msg));
 
   return ret;
 }
@@ -94,12 +94,12 @@ VALUE Message_method_missing(int argc, VALUE* argv, VALUE _self) {
     name[name_len - 1] = 0;  // temporarily strip the =
   }
 
-  const upb_fielddef* f = upb_msgdef_ntofz(self->msgdef->msgdef, name);
+  const upb_fielddef* f = upb_msgdef_ntofz(self->descriptor->msgdef, name);
   // try with a stripped leading underscore -- this allows working around field
   // name conflicts with builting Object method names.
   if (f == NULL && name[0] == '_') {
     name++;
-    f = upb_msgdef_ntofz(self->msgdef->msgdef, name);
+    f = upb_msgdef_ntofz(self->descriptor->msgdef, name);
     name--;
   }
 
@@ -115,10 +115,10 @@ VALUE Message_method_missing(int argc, VALUE* argv, VALUE _self) {
     if (argc < 2) {
       rb_raise(rb_eArgError, "No value provided to setter.");
     }
-    layout_set(self->msgdef->layout, Message_data(self), f, argv[1]);
+    layout_set(self->descriptor->layout, Message_data(self), f, argv[1]);
     return Qnil;
   } else {
-    VALUE ret = layout_get(self->msgdef->layout, Message_data(self), f);
+    VALUE ret = layout_get(self->descriptor->layout, Message_data(self), f);
     return ret;
   }
 }
@@ -134,7 +134,7 @@ int Message_initialize_kwarg(VALUE key, VALUE val, VALUE _self) {
 
   VALUE method_str = rb_id2str(SYM2ID(key));
   char* name = RSTRING_PTR(method_str);
-  const upb_fielddef* f = upb_msgdef_ntofz(self->msgdef->msgdef, name);
+  const upb_fielddef* f = upb_msgdef_ntofz(self->descriptor->msgdef, name);
   if (f == NULL) {
     rb_raise(rb_eArgError,
              "Unknown field name in initialization map entry.");
@@ -145,12 +145,12 @@ int Message_initialize_kwarg(VALUE key, VALUE val, VALUE _self) {
       rb_raise(rb_eArgError,
                "Expected array as initializer value for repeated field.");
     }
-    VALUE ary = layout_get(self->msgdef->layout, Message_data(self), f);
+    VALUE ary = layout_get(self->descriptor->layout, Message_data(self), f);
     for (int i = 0; i < RARRAY_LEN(val); i++) {
       RepeatedField_push(ary, rb_ary_entry(val, i));
     }
   } else {
-    layout_set(self->msgdef->layout, Message_data(self), f, val);
+    layout_set(self->descriptor->layout, Message_data(self), f, val);
   }
   return 0;
 }
@@ -179,7 +179,7 @@ VALUE Message_dup(VALUE _self) {
   MessageHeader* new_msg_self;
   TypedData_Get_Struct(new_msg, MessageHeader, &Message_type, new_msg_self);
 
-  layout_dup(self->msgdef->layout,
+  layout_dup(self->descriptor->layout,
              Message_data(new_msg_self),
              Message_data(self));
 
@@ -193,11 +193,11 @@ VALUE Message_eq(VALUE _self, VALUE _other) {
   MessageHeader* other;
   TypedData_Get_Struct(_other, MessageHeader, &Message_type, other);
 
-  if (self->msgdef != other->msgdef) {
+  if (self->descriptor != other->descriptor) {
     return Qfalse;
   }
 
-  return layout_eq(self->msgdef->layout,
+  return layout_eq(self->descriptor->layout,
                    Message_data(self),
                    Message_data(other));
 }
@@ -206,7 +206,7 @@ VALUE Message_hash(VALUE _self) {
   MessageHeader* self;
   TypedData_Get_Struct(_self, MessageHeader, &Message_type, self);
 
-  return layout_hash(self->msgdef->layout, Message_data(self));
+  return layout_hash(self->descriptor->layout, Message_data(self));
 }
 
 VALUE Message_inspect(VALUE _self) {
@@ -218,7 +218,7 @@ VALUE Message_inspect(VALUE _self) {
   str = rb_str_append(str, rb_str_new2(rb_class2name(CLASS_OF(_self))));
   str = rb_str_cat2(str, ": ");
   str = rb_str_append(str, layout_inspect(
-      self->msgdef->layout, Message_data(self)));
+      self->descriptor->layout, Message_data(self)));
   str = rb_str_cat2(str, ">");
   return str;
 }
@@ -227,21 +227,21 @@ VALUE Message_descriptor(VALUE klass) {
   return rb_iv_get(klass, "@descriptor");
 }
 
-VALUE build_class_from_msgdef(MessageDef* msgdef) {
-  if (msgdef->layout == NULL) {
-    msgdef->layout = create_layout(msgdef->msgdef);
+VALUE build_class_from_descriptor(Descriptor* desc) {
+  if (desc->layout == NULL) {
+    desc->layout = create_layout(desc->msgdef);
   }
-  if (msgdef->fill_method == NULL) {
-    msgdef->fill_method = new_fillmsg_decodermethod(msgdef, &msgdef->fill_method);
+  if (desc->fill_method == NULL) {
+    desc->fill_method = new_fillmsg_decodermethod(desc, &desc->fill_method);
   }
-  if (msgdef->serialize_handlers == NULL) {
-    msgdef->serialize_handlers =
-        upb_pb_encoder_newhandlers(msgdef->msgdef, &msgdef->serialize_handlers);
+  if (desc->serialize_handlers == NULL) {
+    desc->serialize_handlers =
+        upb_pb_encoder_newhandlers(desc->msgdef, &desc->serialize_handlers);
   }
 
-  const char* name = upb_msgdef_fullname(msgdef->msgdef);
+  const char* name = upb_msgdef_fullname(desc->msgdef);
   if (name == NULL) {
-    rb_raise(rb_eRuntimeError, "MessageDef does not have assigned name.");
+    rb_raise(rb_eRuntimeError, "Descriptor does not have assigned name.");
   }
 
   VALUE klass = rb_define_class_id(
@@ -249,7 +249,7 @@ VALUE build_class_from_msgdef(MessageDef* msgdef) {
       // their own toplevel constant class name.
       rb_intern("Message"),
       rb_cObject);
-  rb_iv_set(klass, "@descriptor", msgdef->_value);
+  rb_iv_set(klass, "@descriptor", desc->_value);
   rb_define_alloc_func(klass, Message_alloc);
   rb_define_method(klass, "method_missing",
                    Message_method_missing, -1);
@@ -267,9 +267,9 @@ VALUE build_class_from_msgdef(MessageDef* msgdef) {
 VALUE enum_lookup(VALUE self, VALUE number) {
   int32_t num = NUM2INT(number);
   VALUE desc = rb_iv_get(self, "@descriptor");
-  EnumDef* enumdef = ruby_to_EnumDef(desc);
+  EnumDescriptor* enumdesc = ruby_to_EnumDescriptor(desc);
 
-  const char* name = upb_enumdef_iton(enumdef->enumdef, num);
+  const char* name = upb_enumdef_iton(enumdesc->enumdef, num);
   if (name == NULL) {
     return Qnil;
   } else {
@@ -280,10 +280,10 @@ VALUE enum_lookup(VALUE self, VALUE number) {
 VALUE enum_resolve(VALUE self, VALUE sym) {
   const char* name = rb_id2name(SYM2ID(sym));
   VALUE desc = rb_iv_get(self, "@descriptor");
-  EnumDef* enumdef = ruby_to_EnumDef(desc);
+  EnumDescriptor* enumdesc = ruby_to_EnumDescriptor(desc);
 
   int32_t num = 0;
-  bool found = upb_enumdef_ntoi(enumdef->enumdef, name, &num);
+  bool found = upb_enumdef_ntoi(enumdesc->enumdef, name, &num);
   if (!found) {
     return Qnil;
   } else {
@@ -295,12 +295,12 @@ VALUE enum_descriptor(VALUE self) {
   return rb_iv_get(self, "@descriptor");
 }
 
-VALUE build_module_from_enumdef(EnumDef* enumdef) {
+VALUE build_module_from_enumdesc(EnumDescriptor* enumdesc) {
   VALUE mod = rb_define_module_id(
-      rb_intern(upb_enumdef_fullname(enumdef->enumdef)));
+      rb_intern(upb_enumdef_fullname(enumdesc->enumdef)));
 
   upb_enum_iter it;
-  for (upb_enum_begin(&it, enumdef->enumdef);
+  for (upb_enum_begin(&it, enumdesc->enumdef);
        !upb_enum_done(&it);
        upb_enum_next(&it)) {
     const char* name = upb_enum_iter_name(&it);
@@ -317,7 +317,7 @@ VALUE build_module_from_enumdef(EnumDef* enumdef) {
   rb_define_singleton_method(mod, "lookup", enum_lookup, 1);
   rb_define_singleton_method(mod, "resolve", enum_resolve, 1);
   rb_define_singleton_method(mod, "descriptor", enum_descriptor, 0);
-  rb_iv_set(mod, "@descriptor", enumdef->_value);
+  rb_iv_set(mod, "@descriptor", enumdesc->_value);
 
   return mod;
 }

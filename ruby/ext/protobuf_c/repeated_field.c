@@ -339,23 +339,23 @@ static void validate_type_class(upb_fieldtype_t type, VALUE klass) {
   if (rb_iv_get(klass, "@descriptor") == Qnil) {
     rb_raise(rb_eArgError,
              "Type class has no descriptor. Please pass a "
-             "class or enum as returned by the SymbolTable.");
+             "class or enum as returned by the DescriptorPool.");
   }
   if (type == UPB_TYPE_MESSAGE) {
-    VALUE msgdef = rb_iv_get(klass, "@descriptor");
-    if (!RB_TYPE_P(msgdef, T_DATA) || !RTYPEDDATA_P(msgdef) ||
-        RTYPEDDATA_TYPE(msgdef) != &_MessageDef_type) {
-      rb_raise(rb_eArgError, "Descriptor is not a MessageDef.");
+    VALUE desc = rb_iv_get(klass, "@descriptor");
+    if (!RB_TYPE_P(desc, T_DATA) || !RTYPEDDATA_P(desc) ||
+        RTYPEDDATA_TYPE(desc) != &_Descriptor_type) {
+      rb_raise(rb_eArgError, "Descriptor has an incorrect type.");
     }
     if (rb_get_alloc_func(klass) != &Message_alloc) {
       rb_raise(rb_eArgError,
-               "Message class was not returned by the SymbolTable.");
+               "Message class was not returned by the DescriptorPool.");
     }
   } else if (type == UPB_TYPE_ENUM) {
-    VALUE enumdef = rb_iv_get(klass, "@descriptor");
-    if (!RB_TYPE_P(enumdef, T_DATA) || !RTYPEDDATA_P(enumdef) ||
-        RTYPEDDATA_TYPE(enumdef) != &_EnumDef_type) {
-      rb_raise(rb_eArgError, "Descriptor is not an EnumDef.");
+    VALUE enumdesc = rb_iv_get(klass, "@descriptor");
+    if (!RB_TYPE_P(enumdesc, T_DATA) || !RTYPEDDATA_P(enumdesc) ||
+        RTYPEDDATA_TYPE(enumdesc) != &_EnumDescriptor_type) {
+      rb_raise(rb_eArgError, "Descriptor has an incorrect type.");
     }
   }
 }

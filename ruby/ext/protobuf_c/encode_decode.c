@@ -106,10 +106,10 @@ static size_t str_handler(void *closure, const void *hd, const char *str,
 static void *appendsubmsg_handler(void *closure, const void *hd) {
   VALUE ary = (VALUE)closure;
   const submsg_handlerdata_t *submsgdata = hd;
-  MessageDef* submsgdef = ruby_to_MessageDef(
+  Descriptor* subdesc = ruby_to_Descriptor(
       get_def_obj((void*)submsgdata->md));
 
-  VALUE submsg_rb = rb_class_new_instance(0, NULL, submsgdef->klass);
+  VALUE submsg_rb = rb_class_new_instance(0, NULL, subdesc->klass);
   RepeatedField_push(ary, submsg_rb);
 
   MessageHeader* submsg;
@@ -121,12 +121,12 @@ static void *appendsubmsg_handler(void *closure, const void *hd) {
 static void *submsg_handler(void *closure, const void *hd) {
   MessageHeader* msg = closure;
   const submsg_handlerdata_t* submsgdata = hd;
-  MessageDef* submsgdef = ruby_to_MessageDef(
+  Descriptor* subdesc = ruby_to_Descriptor(
       get_def_obj((void*)submsgdata->md));
 
   if (DEREF(Message_data(msg), submsgdata->ofs, VALUE) == Qnil) {
     DEREF(Message_data(msg), submsgdata->ofs, VALUE) =
-        rb_class_new_instance(0, NULL, submsgdef->klass);
+        rb_class_new_instance(0, NULL, subdesc->klass);
   }
 
   VALUE submsg_rb = DEREF(Message_data(msg), submsgdata->ofs, VALUE);
@@ -136,23 +136,23 @@ static void *submsg_handler(void *closure, const void *hd) {
 }
 
 static void add_handlers_for_message(const void *closure, upb_handlers *h) {
-  MessageDef* msgdef = ruby_to_MessageDef(
+  Descriptor* desc = ruby_to_Descriptor(
       get_def_obj((void*)upb_handlers_msgdef(h)));
   // Ensure layout exists. We may be invoked to create handlers for a given
   // message if we are included as a submsg of another message type before our
   // class is actually built, so to work around this, we just create the layout
   // (and handlers, in the class-building function) on-demand.
-  if (msgdef->layout == NULL) {
-    msgdef->layout = create_layout(msgdef->msgdef);
+  if (desc->layout == NULL) {
+    desc->layout = create_layout(desc->msgdef);
   }
 
   upb_msg_iter i;
 
-  for (upb_msg_begin(&i, msgdef->msgdef);
+  for (upb_msg_begin(&i, desc->msgdef);
        !upb_msg_done(&i);
        upb_msg_next(&i)) {
     const upb_fielddef *f = upb_msg_iter_field(&i);
-    size_t offset = msgdef->layout->offsets[upb_fielddef_index(f)];
+    size_t offset = desc->layout->offsets[upb_fielddef_index(f)];
 
     if (upb_fielddef_isseq(f)) {
       upb_handlerattr attr = UPB_HANDLERATTR_INITIALIZER;
@@ -227,18 +227,18 @@ static void add_handlers_for_message(const void *closure, upb_handlers *h) {
 }
 
 // Creates upb handlers for populating a message.
-static const upb_handlers *new_fill_handlers(MessageDef* msgdef,
+static const upb_handlers *new_fill_handlers(Descriptor* desc,
                                              const void* owner) {
-  return upb_handlers_newfrozen(msgdef->msgdef, owner,
+  return upb_handlers_newfrozen(desc->msgdef, owner,
                                 add_handlers_for_message, NULL);
 }
 
 // Constructs the upb decoder method for parsing messages of this type.
 // This is called from the message class creation code.
-const upb_pbdecodermethod *new_fillmsg_decodermethod(MessageDef* msgdef,
+const upb_pbdecodermethod *new_fillmsg_decodermethod(Descriptor* desc,
                                                      const void* owner) {
   const upb_handlers *fill_handlers =
-      new_fill_handlers(msgdef, &fill_handlers);
+      new_fill_handlers(desc, &fill_handlers);
   upb_pbdecodermethodopts opts;
   upb_pbdecodermethodopts_init(&opts, fill_handlers);
 
@@ -247,27 +247,27 @@ const upb_pbdecodermethod *new_fillmsg_decodermethod(MessageDef* msgdef,
   return ret;
 }
 
-static const upb_pbdecodermethod *msgdef_decodermethod(MessageDef* msgdef) {
-  if (msgdef->fill_method == NULL) {
-    msgdef->fill_method = new_fillmsg_decodermethod(
-        msgdef, &msgdef->fill_method);
+static const upb_pbdecodermethod *msgdef_decodermethod(Descriptor* desc) {
+  if (desc->fill_method == NULL) {
+    desc->fill_method = new_fillmsg_decodermethod(
+        desc, &desc->fill_method);
   }
-  return msgdef->fill_method;
+  return desc->fill_method;
 }
 
 VALUE Message_decode(VALUE klass, VALUE data) {
   VALUE descriptor = rb_iv_get(klass, "@descriptor");
-  MessageDef* msgdef = ruby_to_MessageDef(descriptor);
+  Descriptor* desc = ruby_to_Descriptor(descriptor);
 
   if (TYPE(data) != T_STRING) {
     rb_raise(rb_eArgError, "Expected string for binary protobuf data.");
   }
 
-  VALUE msg_rb = rb_class_new_instance(0, NULL, msgdef->klass);
+  VALUE msg_rb = rb_class_new_instance(0, NULL, desc->klass);
   MessageHeader* msg;
   TypedData_Get_Struct(msg_rb, MessageHeader, &Message_type, msg);
 
-  const upb_pbdecodermethod* method = msgdef_decodermethod(msgdef);
+  const upb_pbdecodermethod* method = msgdef_decodermethod(desc);
   const upb_handlers* h = upb_pbdecodermethod_desthandlers(method);
   upb_pbdecoder decoder;
   upb_sink sink;
@@ -353,7 +353,7 @@ void stringsink_uninit(stringsink *sink) {
 
 /* msgvisitor *****************************************************************/
 
-static void putmsg(VALUE msg, const MessageDef* msgdef,
+static void putmsg(VALUE msg, const Descriptor* desc,
                    upb_sink *sink, int depth);
 
 static upb_selector_t getsel(const upb_fielddef *f, upb_handlertype_t type) {
@@ -382,10 +382,10 @@ static void putsubmsg(VALUE submsg, const upb_fielddef *f, upb_sink *sink,
 
   upb_sink subsink;
   VALUE descriptor = rb_iv_get(submsg, "@descriptor");
-  MessageDef* submsgdef = ruby_to_MessageDef(descriptor);
+  Descriptor* subdesc = ruby_to_Descriptor(descriptor);
 
   upb_sink_startsubmsg(sink, getsel(f, UPB_HANDLER_STARTSUBMSG), &subsink);
-  putmsg(submsg, submsgdef, &subsink, depth + 1);
+  putmsg(submsg, subdesc, &subsink, depth + 1);
   upb_sink_endsubmsg(sink, getsel(f, UPB_HANDLER_ENDSUBMSG));
 }
 
@@ -438,7 +438,7 @@ static void putary(VALUE ary, const upb_fielddef *f, upb_sink *sink,
 
 static const int kMaxMessageDepth = 100;
 
-static void putmsg(VALUE msg_rb, const MessageDef* msgdef,
+static void putmsg(VALUE msg_rb, const Descriptor* desc,
                    upb_sink *sink, int depth) {
   upb_sink_startmsg(sink);
 
@@ -454,11 +454,11 @@ static void putmsg(VALUE msg_rb, const MessageDef* msgdef,
   void* msg_data = Message_data(msg);
 
   upb_msg_iter i;
-  for (upb_msg_begin(&i, msgdef->msgdef);
+  for (upb_msg_begin(&i, desc->msgdef);
        !upb_msg_done(&i);
        upb_msg_next(&i)) {
     upb_fielddef *f = upb_msg_iter_field(&i);
-    uint32_t offset = msgdef->layout->offsets[upb_fielddef_index(f)];
+    uint32_t offset = desc->layout->offsets[upb_fielddef_index(f)];
 
     if (upb_fielddef_isseq(f)) {
       VALUE ary = DEREF(msg_data, offset, VALUE);
@@ -508,29 +508,29 @@ static void putmsg(VALUE msg_rb, const MessageDef* msgdef,
   upb_sink_endmsg(sink, &status);
 }
 
-static const upb_handlers* msgdef_serialize_handlers(MessageDef* msgdef) {
-  if (msgdef->serialize_handlers == NULL) {
-    msgdef->serialize_handlers =
-        upb_pb_encoder_newhandlers(msgdef->msgdef, &msgdef->serialize_handlers);
+static const upb_handlers* msgdef_serialize_handlers(Descriptor* desc) {
+  if (desc->serialize_handlers == NULL) {
+    desc->serialize_handlers =
+        upb_pb_encoder_newhandlers(desc->msgdef, &desc->serialize_handlers);
   }
-  return msgdef->serialize_handlers;
+  return desc->serialize_handlers;
 }
 
 VALUE Message_encode(VALUE klass, VALUE msg_rb) {
   VALUE descriptor = rb_iv_get(klass, "@descriptor");
-  MessageDef* msgdef = ruby_to_MessageDef(descriptor);
+  Descriptor* desc = ruby_to_Descriptor(descriptor);
 
   stringsink sink;
   stringsink_init(&sink);
 
   const upb_handlers* serialize_handlers =
-      msgdef_serialize_handlers(msgdef);
+      msgdef_serialize_handlers(desc);
 
   upb_pb_encoder encoder;
   upb_pb_encoder_init(&encoder, serialize_handlers);
   upb_pb_encoder_resetoutput(&encoder, &sink.sink);
 
-  putmsg(msg_rb, msgdef, upb_pb_encoder_input(&encoder), 0);
+  putmsg(msg_rb, desc, upb_pb_encoder_input(&encoder), 0);
 
   VALUE ret = rb_str_new(sink.ptr, sink.len);
 

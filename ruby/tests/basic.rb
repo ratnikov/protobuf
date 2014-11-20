@@ -6,8 +6,8 @@ require 'test/unit'
 # ------------- generated code --------------
 
 module BasicTest
-  symtab = Google::Protobuf::SymbolTable.new
-  symtab.build do
+  pool = Google::Protobuf::DescriptorPool.new
+  pool.build do
     add_message "TestMessage" do
       optional :optional_int32,  :int32,        1
       optional :optional_int64,  :int64,        2
@@ -54,12 +54,12 @@ module BasicTest
     end
   end
 
-  TestMessage = symtab.get_class("TestMessage")
-  TestMessage2 = symtab.get_class("TestMessage2")
-  Recursive1 = symtab.get_class("Recursive1")
-  Recursive2 = symtab.get_class("Recursive2")
-  TestEnum = symtab.get_enum("TestEnum")
-  BadFieldNames = symtab.get_class("BadFieldNames")
+  TestMessage = pool.get_class("TestMessage")
+  TestMessage2 = pool.get_class("TestMessage2")
+  Recursive1 = pool.get_class("Recursive1")
+  Recursive2 = pool.get_class("Recursive2")
+  TestEnum = pool.get_enum("TestEnum")
+  BadFieldNames = pool.get_class("BadFieldNames")
 
 # ------------ test cases ---------------
 
@@ -326,7 +326,7 @@ module BasicTest
     end
 
     def test_def_errors
-      s = Google::Protobuf::SymbolTable.new
+      s = Google::Protobuf::DescriptorPool.new
       assert_raise TypeError do
         s.build do
           # enum with no default (integer value 0)
@@ -484,8 +484,10 @@ module BasicTest
     def test_reflection
       m = TestMessage.new(:optional_int32 => 1234)
       msgdef = m.class.descriptor
+      assert msgdef.class == Google::Protobuf::Descriptor
       assert msgdef.fields.any? {|field| field.name == "optional_int32"}
       optional_int32 = msgdef.lookup "optional_int32"
+      assert optional_int32.class == Google::Protobuf::FieldDescriptor
       assert optional_int32 != nil
       assert optional_int32.name == "optional_int32"
       assert optional_int32.type == :int32
@@ -503,6 +505,7 @@ module BasicTest
 
       optional_enum = msgdef.lookup "optional_enum"
       assert optional_enum.subtype == TestEnum.descriptor
+      assert optional_enum.subtype.class == Google::Protobuf::EnumDescriptor
       optional_enum.subtype.values.each do |k, v|
         # set with integer, check resolution to symbolic name
         optional_enum.set(m, v)

@@ -336,13 +336,13 @@ VALUE layout_get(MessageLayout* layout,
   } else {
     VALUE type_class = Qnil;
     if (upb_fielddef_type(field) == UPB_TYPE_MESSAGE) {
-      MessageDef* submsgdef =
-          ruby_to_MessageDef(get_def_obj((void *)upb_fielddef_subdef(field)));
-      type_class = submsgdef->klass;
+      Descriptor* submsgdesc =
+          ruby_to_Descriptor(get_def_obj((void *)upb_fielddef_subdef(field)));
+      type_class = submsgdesc->klass;
     } else if (upb_fielddef_type(field) == UPB_TYPE_ENUM) {
-      EnumDef* subenumdef =
-          ruby_to_EnumDef(get_def_obj((void *)upb_fielddef_subdef(field)));
-      type_class = subenumdef->module;
+      EnumDescriptor* subenumdesc =
+          ruby_to_EnumDescriptor(get_def_obj((void *)upb_fielddef_subdef(field)));
+      type_class = subenumdesc->module;
     }
     return native_slot_get(upb_fielddef_type(field),
                            type_class,
@@ -386,13 +386,13 @@ void layout_set(MessageLayout* layout,
   } else {
     VALUE type_class = Qnil;
     if (upb_fielddef_type(field) == UPB_TYPE_MESSAGE) {
-      MessageDef* submsgdef =
-          ruby_to_MessageDef(get_def_obj((void *)upb_fielddef_subdef(field)));
-      type_class = submsgdef->klass;
+      Descriptor* submsgdesc =
+          ruby_to_Descriptor(get_def_obj((void *)upb_fielddef_subdef(field)));
+      type_class = submsgdesc->klass;
     } else if (upb_fielddef_type(field) == UPB_TYPE_ENUM) {
-      EnumDef* subenumdef =
-          ruby_to_EnumDef(get_def_obj((void *)upb_fielddef_subdef(field)));
-      type_class = subenumdef->module;
+      EnumDescriptor* subenumdesc =
+          ruby_to_EnumDescriptor(get_def_obj((void *)upb_fielddef_subdef(field)));
+      type_class = subenumdesc->module;
     }
     native_slot_set(upb_fielddef_type(field), type_class, memory, val);
   }
@@ -411,15 +411,15 @@ void layout_init(MessageLayout* layout,
     if (upb_fielddef_label(field) == UPB_LABEL_REPEATED) {
       VALUE ary = Qnil;
       if (upb_fielddef_type(field) == UPB_TYPE_MESSAGE) {
-        MessageDef* submsgdef =
-            ruby_to_MessageDef(get_def_obj((void *)upb_fielddef_subdef(field)));
-        VALUE type_class = submsgdef->klass;
+        Descriptor* submsgdesc =
+            ruby_to_Descriptor(get_def_obj((void *)upb_fielddef_subdef(field)));
+        VALUE type_class = submsgdesc->klass;
         VALUE args[2] = { ID2SYM(rb_intern("message")), type_class };
         ary = rb_class_new_instance(2, args, cRepeatedField);
       } else if (upb_fielddef_type(field) == UPB_TYPE_ENUM) {
-        EnumDef* subenumdef =
-            ruby_to_EnumDef(get_def_obj((void *)upb_fielddef_subdef(field)));
-        VALUE type_class = subenumdef->module;
+        EnumDescriptor* subenumdesc =
+            ruby_to_EnumDescriptor(get_def_obj((void *)upb_fielddef_subdef(field)));
+        VALUE type_class = subenumdesc->module;
         VALUE args[2] = { ID2SYM(rb_intern("enum")), type_class };
         ary = rb_class_new_instance(2, args, cRepeatedField);
       } else {

@@ -4,8 +4,8 @@ require 'protobuf'
 require 'test/unit'
 
 module StressTest
-  symtab = Google::Protobuf::SymbolTable.new
-  symtab.build do
+  pool = Google::Protobuf::DescriptorPool.new
+  pool.build do
     add_message "TestMessage" do
       optional :a,  :int32,        1
       repeated :b,  :message,      2, "M"
@@ -15,8 +15,8 @@ module StressTest
     end
   end
 
-  TestMessage = symtab.get_class("TestMessage")
-  M = symtab.get_class("M")
+  TestMessage = pool.get_class("TestMessage")
+  M = pool.get_class("M")
 
   class StressTest < Test::Unit::TestCase
     def get_msg
