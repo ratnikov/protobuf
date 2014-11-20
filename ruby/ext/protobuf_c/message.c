@@ -87,11 +87,22 @@ VALUE Message_method_missing(int argc, VALUE* argv, VALUE _self) {
   size_t name_len = RSTRING_LEN(method_str);
   bool setter = false;
 
+  // Setters have names that end in '='. We temporarily strip this to do the
+  // name lookup, and restore it below.
   if (name[name_len - 1] == '=') {
     setter = true;
     name[name_len - 1] = 0;  // temporarily strip the =
   }
+
   const upb_fielddef* f = upb_msgdef_ntofz(self->msgdef->msgdef, name);
+  // try with a stripped leading underscore -- this allows working around field
+  // name conflicts with builting Object method names.
+  if (f == NULL && name[0] == '_') {
+    name++;
+    f = upb_msgdef_ntofz(self->msgdef->msgdef, name);
+    name--;
+  }
+
   if (setter) {
     name[name_len - 1] = '=';
   }
@@ -212,6 +223,9 @@ VALUE Message_inspect(VALUE _self) {
   return str;
 }
 
+VALUE Message_descriptor(VALUE klass) {
+  return rb_iv_get(klass, "@descriptor");
+}
 
 VALUE build_class_from_msgdef(MessageDef* msgdef) {
   if (msgdef->layout == NULL) {
@@ -246,6 +260,7 @@ VALUE build_class_from_msgdef(MessageDef* msgdef) {
   rb_define_method(klass, "inspect", Message_inspect, 0);
   rb_define_singleton_method(klass, "decode", Message_decode, 1);
   rb_define_singleton_method(klass, "encode", Message_encode, 1);
+  rb_define_singleton_method(klass, "descriptor", Message_descriptor, 0);
   return klass;
 }
 
@@ -276,6 +291,10 @@ VALUE enum_resolve(VALUE self, VALUE sym) {
   }
 }
 
+VALUE enum_descriptor(VALUE self) {
+  return rb_iv_get(self, "@descriptor");
+}
+
 VALUE build_module_from_enumdef(EnumDef* enumdef) {
   VALUE mod = rb_define_module_id(
       rb_intern(upb_enumdef_fullname(enumdef->enumdef)));
@@ -297,6 +316,7 @@ VALUE build_module_from_enumdef(EnumDef* enumdef) {
 
   rb_define_singleton_method(mod, "lookup", enum_lookup, 1);
   rb_define_singleton_method(mod, "resolve", enum_resolve, 1);
+  rb_define_singleton_method(mod, "descriptor", enum_descriptor, 0);
   rb_iv_set(mod, "@descriptor", enumdef->_value);
 
   return mod;

@@ -48,6 +48,10 @@ module BasicTest
       value :B, 2
       value :C, 3
     end
+    add_message "BadFieldNames" do
+      optional :dup, :int32, 1
+      optional :class, :int32, 2
+    end
   end
 
   TestMessage = symtab.get_class("TestMessage")
@@ -55,6 +59,7 @@ module BasicTest
   Recursive1 = symtab.get_class("Recursive1")
   Recursive2 = symtab.get_class("Recursive2")
   TestEnum = symtab.get_enum("TestEnum")
+  BadFieldNames = symtab.get_class("BadFieldNames")
 
 # ------------ test cases ---------------
 
@@ -340,6 +345,15 @@ module BasicTest
       end
     end
 
+    def test_bad_field_names
+      m = BadFieldNames.new(:dup => 1, :class => 2)
+      m2 = m.dup
+      assert m == m2
+      assert m._dup == 1
+      assert m._class == 2
+    end
+
+
     def test_int_ranges
       m = TestMessage.new
 
@@ -464,6 +478,35 @@ module BasicTest
         data_new = TestMessage.encode(m)
         assert data_new == data
         data = data_new
+      end
+    end
+
+    def test_reflection
+      m = TestMessage.new(:optional_int32 => 1234)
+      msgdef = m.class.descriptor
+      assert msgdef.fields.any? {|field| field.name == "optional_int32"}
+      optional_int32 = msgdef.lookup "optional_int32"
+      assert optional_int32 != nil
+      assert optional_int32.name == "optional_int32"
+      assert optional_int32.type == :int32
+      optional_int32.set(m, 5678)
+      assert m.optional_int32 == 5678
+      m.optional_int32 = 1000
+      assert optional_int32.get(m) == 1000
+
+      optional_msg = msgdef.lookup "optional_msg"
+      assert optional_msg.subtype == TestMessage2.descriptor
+
+      optional_msg.set(m, optional_msg.subtype.msgclass.new)
+
+      assert msgdef.msgclass == TestMessage
+
+      optional_enum = msgdef.lookup "optional_enum"
+      assert optional_enum.subtype == TestEnum.descriptor
+      optional_enum.subtype.values.each do |k, v|
+        # set with integer, check resolution to symbolic name
+        optional_enum.set(m, v)
+        assert optional_enum.get(m) == k
       end
     end
 

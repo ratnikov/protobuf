@@ -28,8 +28,8 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#ifndef EXPERIMENTAL_USERS_CFALLIN_PROTO3_RUBY_C_EXT_UPB_H_
-#define EXPERIMENTAL_USERS_CFALLIN_PROTO3_RUBY_C_EXT_UPB_H_
+#ifndef __GOOGLE_PROTOBUF_RUBY_PROTOBUF_H__
+#define __GOOGLE_PROTOBUF_RUBY_PROTOBUF_H__
 
 #include <ruby/ruby.h>
 #include <ruby/vm.h>
@@ -78,6 +78,7 @@ struct MessageDef {
   MessageLayout* layout;
   VALUE klass;  // begins as nil
   VALUE fields;  // Ruby array of FieldDef Ruby objects
+  VALUE field_map;  // Ruby hashmap from field name to FieldDef Ruby object
   const upb_pbdecodermethod* fill_method;
   const upb_handlers* serialize_handlers;
 };
@@ -136,7 +137,9 @@ MessageDef* ruby_to_MessageDef(VALUE value);
 VALUE MessageDef_name(VALUE _self);
 VALUE MessageDef_name_set(VALUE _self, VALUE str);
 VALUE MessageDef_fields(VALUE _self);
+VALUE MessageDef_lookup(VALUE _self, VALUE name);
 VALUE MessageDef_add_field(VALUE _self, VALUE obj);
+VALUE MessageDef_msgclass(VALUE _self);
 extern const rb_data_type_t _MessageDef_type;
 
 void FieldDef_mark(void* _self);
@@ -154,6 +157,9 @@ VALUE FieldDef_number(VALUE _self);
 VALUE FieldDef_number_set(VALUE _self, VALUE number);
 VALUE FieldDef_submsg_name(VALUE _self);
 VALUE FieldDef_submsg_name_set(VALUE _self, VALUE value);
+VALUE FieldDef_subtype(VALUE _self);
+VALUE FieldDef_get(VALUE _self, VALUE msg_rb);
+VALUE FieldDef_set(VALUE _self, VALUE msg_rb, VALUE value);
 upb_fieldtype_t ruby_to_fieldtype(VALUE type);
 VALUE fieldtype_to_ruby(upb_fieldtype_t type);
 
@@ -167,6 +173,8 @@ VALUE EnumDef_name_set(VALUE _self, VALUE str);
 VALUE EnumDef_add_value(VALUE _self, VALUE name, VALUE number);
 VALUE EnumDef_lookup_name(VALUE _self, VALUE name);
 VALUE EnumDef_lookup_value(VALUE _self, VALUE number);
+VALUE EnumDef_values(VALUE _self);
+VALUE EnumDef_enummodule(VALUE _self);
 extern const rb_data_type_t _EnumDef_type;
 
 void MessageBuilderContext_mark(void* _self);
@@ -302,6 +310,7 @@ VALUE Message_dup(VALUE _self);
 VALUE Message_eq(VALUE _self, VALUE _other);
 VALUE Message_hash(VALUE _self);
 VALUE Message_inspect(VALUE _self);
+VALUE Message_descriptor(VALUE klass);
 VALUE Message_decode(VALUE klass, VALUE data);
 VALUE Message_encode(VALUE klass, VALUE msg_rb);
 

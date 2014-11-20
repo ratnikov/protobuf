@@ -190,6 +190,7 @@ void MessageDef_mark(void* _self) {
   MessageDef* self = _self;
   rb_gc_mark(self->klass);
   rb_gc_mark(self->fields);
+  rb_gc_mark(self->field_map);
 }
 
 void MessageDef_free(void* _self) {
@@ -213,6 +214,7 @@ VALUE MessageDef_alloc(VALUE klass) {
   self->msgdef = upb_msgdef_new(&self->msgdef);
   self->klass = Qnil;
   self->fields = rb_ary_new();
+  self->field_map = rb_hash_new();
   self->layout = NULL;
   self->fill_method = NULL;
   self->serialize_handlers = NULL;
@@ -224,7 +226,9 @@ void MessageDef_register(VALUE module) {
       module, "MessageDef", rb_cObject);
   rb_define_alloc_func(klass, MessageDef_alloc);
   rb_define_method(klass, "fields", MessageDef_fields, 0);
+  rb_define_method(klass, "lookup", MessageDef_lookup, 1);
   rb_define_method(klass, "add_field", MessageDef_add_field, 1);
+  rb_define_method(klass, "msgclass", MessageDef_msgclass, 0);
   rb_define_method(klass, "name", MessageDef_name, 0);
   rb_define_method(klass, "name=", MessageDef_name_set, 1);
   cMessageDef = klass;
@@ -256,6 +260,11 @@ VALUE MessageDef_fields(VALUE _self) {
   return self->fields;
 }
 
+VALUE MessageDef_lookup(VALUE _self, VALUE name) {
+  SELF(MessageDef);
+  return rb_hash_aref(self->field_map, name);
+}
+
 VALUE MessageDef_add_field(VALUE _self, VALUE obj) {
   SELF(MessageDef);
   VALUE obj_klass = rb_obj_class(obj);
@@ -269,7 +278,15 @@ VALUE MessageDef_add_field(VALUE _self, VALUE obj) {
     rb_raise(rb_eRuntimeError, "Adding field to MessageDef failed.");
   }
   rb_ary_push(self->fields, obj);
+  rb_hash_aset(self->field_map,
+               rb_str_new2(upb_fielddef_name(def->fielddef)),
+               obj);
   return Qnil;
+}
+
+VALUE MessageDef_msgclass(VALUE _self) {
+  SELF(MessageDef);
+  return self->klass;
 }
 
 // -----------------------------------------------------------------------------
@@ -309,6 +326,9 @@ void FieldDef_register(VALUE module) {
   rb_define_method(klass, "number=", FieldDef_number_set, 1);
   rb_define_method(klass, "submsg_name", FieldDef_submsg_name, 0);
   rb_define_method(klass, "submsg_name=", FieldDef_submsg_name_set, 1);
+  rb_define_method(klass, "subtype", FieldDef_subtype, 0);
+  rb_define_method(klass, "get", FieldDef_get, 1);
+  rb_define_method(klass, "set", FieldDef_set, 2);
   cFieldDef = klass;
   rb_gc_register_address(&cFieldDef);
 }
@@ -485,6 +505,39 @@ VALUE FieldDef_submsg_name_set(VALUE _self, VALUE value) {
   return Qnil;
 }
 
+VALUE FieldDef_subtype(VALUE _self) {
+  SELF(FieldDef);
+  if (!upb_fielddef_hassubdef(self->fielddef)) {
+    return Qnil;
+  }
+  const upb_def* def = upb_fielddef_subdef(self->fielddef);
+  if (def == NULL) {
+    return Qnil;
+  }
+  return get_def_obj((void*)def);
+}
+
+VALUE FieldDef_get(VALUE _self, VALUE msg_rb) {
+  SELF(FieldDef);
+  MessageHeader* msg;
+  TypedData_Get_Struct(msg_rb, MessageHeader, &Message_type, msg);
+  if (msg->msgdef->msgdef != upb_fielddef_containingtype(self->fielddef)) {
+    rb_raise(rb_eTypeError, "get method called on wrong message type");
+  }
+  return layout_get(msg->msgdef->layout, Message_data(msg), self->fielddef);
+}
+
+VALUE FieldDef_set(VALUE _self, VALUE msg_rb, VALUE value) {
+  SELF(FieldDef);
+  MessageHeader* msg;
+  TypedData_Get_Struct(msg_rb, MessageHeader, &Message_type, msg);
+  if (msg->msgdef->msgdef != upb_fielddef_containingtype(self->fielddef)) {
+    rb_raise(rb_eTypeError, "set method called on wrong message type");
+  }
+  layout_set(msg->msgdef->layout, Message_data(msg), self->fielddef, value);
+  return Qnil;
+}
+
 // -----------------------------------------------------------------------------
 // EnumDef.
 // -----------------------------------------------------------------------------
@@ -519,6 +572,8 @@ void EnumDef_register(VALUE module) {
   rb_define_method(klass, "add_value", EnumDef_add_value, 2);
   rb_define_method(klass, "lookup_name", EnumDef_lookup_name, 1);
   rb_define_method(klass, "lookup_value", EnumDef_lookup_value, 1);
+  rb_define_method(klass, "values", EnumDef_values, 0);
+  rb_define_method(klass, "enummodule", EnumDef_enummodule, 0);
   cEnumDef = klass;
   rb_gc_register_address(&cEnumDef);
 }
@@ -575,6 +630,27 @@ VALUE EnumDef_lookup_value(VALUE _self, VALUE number) {
   } else {
     return Qnil;
   }
+}
+
+VALUE EnumDef_values(VALUE _self) {
+  SELF(EnumDef);
+  VALUE ret = rb_hash_new();
+
+  upb_enum_iter it;
+  for (upb_enum_begin(&it, self->enumdef);
+       !upb_enum_done(&it);
+       upb_enum_next(&it)) {
+    VALUE key = ID2SYM(rb_intern(upb_enum_iter_name(&it)));
+    VALUE number = INT2NUM(upb_enum_iter_number(&it));
+    rb_hash_aset(ret, key, number);
+  }
+
+  return ret;
+}
+
+VALUE EnumDef_enummodule(VALUE _self) {
+  SELF(EnumDef);
+  return self->module;
 }
 
 // -----------------------------------------------------------------------------

@@ -354,7 +354,7 @@ void stringsink_uninit(stringsink *sink) {
 /* msgvisitor *****************************************************************/
 
 static void putmsg(VALUE msg, const MessageDef* msgdef,
-                   upb_sink *sink);
+                   upb_sink *sink, int depth);
 
 static upb_selector_t getsel(const upb_fielddef *f, upb_handlertype_t type) {
   upb_selector_t ret;
@@ -376,7 +376,8 @@ static void putstr(VALUE str, const upb_fielddef *f, upb_sink *sink) {
   upb_sink_endstr(sink, getsel(f, UPB_HANDLER_ENDSTR));
 }
 
-static void putsubmsg(VALUE submsg, const upb_fielddef *f, upb_sink *sink) {
+static void putsubmsg(VALUE submsg, const upb_fielddef *f, upb_sink *sink,
+                      int depth) {
   if (submsg == Qnil) return;
 
   upb_sink subsink;
@@ -384,11 +385,12 @@ static void putsubmsg(VALUE submsg, const upb_fielddef *f, upb_sink *sink) {
   MessageDef* submsgdef = ruby_to_MessageDef(descriptor);
 
   upb_sink_startsubmsg(sink, getsel(f, UPB_HANDLER_STARTSUBMSG), &subsink);
-  putmsg(submsg, submsgdef, &subsink);
+  putmsg(submsg, submsgdef, &subsink, depth + 1);
   upb_sink_endsubmsg(sink, getsel(f, UPB_HANDLER_ENDSUBMSG));
 }
 
-static void putary(VALUE ary, const upb_fielddef *f, upb_sink *sink) {
+static void putary(VALUE ary, const upb_fielddef *f, upb_sink *sink,
+                   int depth) {
   if (ary == Qnil) return;
 
   upb_sink subsink;
@@ -424,7 +426,7 @@ static void putary(VALUE ary, const upb_fielddef *f, upb_sink *sink) {
         putstr(*((VALUE *)memory), f, &subsink);
         break;
       case UPB_TYPE_MESSAGE:
-        putsubmsg(*((VALUE *)memory), f, &subsink);
+        putsubmsg(*((VALUE *)memory), f, &subsink, depth);
         break;
 
 #undef T
@@ -434,9 +436,18 @@ static void putary(VALUE ary, const upb_fielddef *f, upb_sink *sink) {
   upb_sink_endseq(sink, getsel(f, UPB_HANDLER_ENDSEQ));
 }
 
+static const int kMaxMessageDepth = 100;
+
 static void putmsg(VALUE msg_rb, const MessageDef* msgdef,
-                   upb_sink *sink) {
+                   upb_sink *sink, int depth) {
   upb_sink_startmsg(sink);
+
+  // Protect against cycles (possible because users may freely reassign message
+  // and repeated fields) by imposing a maximum recursion depth.
+  if (depth > kMaxMessageDepth) {
+    rb_raise(rb_eRuntimeError,
+             "Maximum recursion depth exceeded during encoding.");
+  }
 
   MessageHeader* msg;
   TypedData_Get_Struct(msg_rb, MessageHeader, &Message_type, msg);
@@ -452,7 +463,7 @@ static void putmsg(VALUE msg_rb, const MessageDef* msgdef,
     if (upb_fielddef_isseq(f)) {
       VALUE ary = DEREF(msg_data, offset, VALUE);
       if (ary != Qnil) {
-        putary(ary, f, sink);
+        putary(ary, f, sink, depth);
       }
     } else if (upb_fielddef_isstring(f)) {
       VALUE str = DEREF(msg_data, offset, VALUE);
@@ -460,7 +471,7 @@ static void putmsg(VALUE msg_rb, const MessageDef* msgdef,
         putstr(str, f, sink);
       }
     } else if (upb_fielddef_issubmsg(f)) {
-      putsubmsg(DEREF(msg_data, offset, VALUE), f, sink);
+      putsubmsg(DEREF(msg_data, offset, VALUE), f, sink, depth);
     } else {
       upb_selector_t sel = getsel(f, upb_handlers_getprimitivehandlertype(f));
 
@@ -519,7 +530,7 @@ VALUE Message_encode(VALUE klass, VALUE msg_rb) {
   upb_pb_encoder_init(&encoder, serialize_handlers);
   upb_pb_encoder_resetoutput(&encoder, &sink.sink);
 
-  putmsg(msg_rb, msgdef, upb_pb_encoder_input(&encoder));
+  putmsg(msg_rb, msgdef, upb_pb_encoder_input(&encoder), 0);
 
   VALUE ret = rb_str_new(sink.ptr, sink.len);
 
