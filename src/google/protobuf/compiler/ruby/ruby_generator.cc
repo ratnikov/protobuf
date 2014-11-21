@@ -190,7 +190,8 @@ void GenerateMessageAssignment(
     "prefix", prefix,
     "name", RubifyConstant(message->name()));
   printer->Print(
-    "Google::Protobuf::SymbolTable.global_symtab.get_class(\"$full_name$\")\n",
+    "Google::Protobuf::DescriptorPool.global_pool."
+    "lookup(\"$full_name$\").msgclass\n",
     "full_name", message->full_name());
 
   std::string nested_prefix = prefix + message->name() + "::";
@@ -211,7 +212,8 @@ void GenerateEnumAssignment(
     "prefix", prefix,
     "name", RubifyConstant(en->name()));
   printer->Print(
-    "Google::Protobuf::SymbolTable.global_symtab.get_enum(\"$full_name$\")\n",
+    "Google::Protobuf::DescriptorPool.global_pool."
+    "lookup(\"$full_name$\").enummodule\n",
     "full_name", en->full_name());
 }
 
