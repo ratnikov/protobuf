@@ -15,8 +15,8 @@ module StressTest
     end
   end
 
-  TestMessage = pool.get_class("TestMessage")
-  M = pool.get_class("M")
+  TestMessage = pool.lookup("TestMessage").msgclass
+  M = pool.lookup("M").msgclass
 
   class StressTest < Test::Unit::TestCase
     def get_msg

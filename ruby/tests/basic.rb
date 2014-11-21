@@ -51,15 +51,16 @@ module BasicTest
     add_message "BadFieldNames" do
       optional :dup, :int32, 1
       optional :class, :int32, 2
+      optional :"a.b", :int32, 3
     end
   end
 
-  TestMessage = pool.get_class("TestMessage")
-  TestMessage2 = pool.get_class("TestMessage2")
-  Recursive1 = pool.get_class("Recursive1")
-  Recursive2 = pool.get_class("Recursive2")
-  TestEnum = pool.get_enum("TestEnum")
-  BadFieldNames = pool.get_class("BadFieldNames")
+  TestMessage = pool.lookup("TestMessage").msgclass
+  TestMessage2 = pool.lookup("TestMessage2").msgclass
+  Recursive1 = pool.lookup("Recursive1").msgclass
+  Recursive2 = pool.lookup("Recursive2").msgclass
+  TestEnum = pool.lookup("TestEnum").enummodule
+  BadFieldNames = pool.lookup("BadFieldNames").msgclass
 
 # ------------ test cases ---------------
 
@@ -345,12 +346,26 @@ module BasicTest
       end
     end
 
+    def test_corecursive
+      # just be sure that we can instantiate types with corecursive field-type
+      # references.
+      m = Recursive1.new(:foo => Recursive2.new(:foo => Recursive1.new))
+      assert Recursive1.descriptor.lookup("foo").subtype ==
+        Recursive2.descriptor
+      assert Recursive2.descriptor.lookup("foo").subtype ==
+        Recursive1.descriptor
+    end
+
     def test_bad_field_names
       m = BadFieldNames.new(:dup => 1, :class => 2)
       m2 = m.dup
       assert m == m2
-      assert m._dup == 1
-      assert m._class == 2
+      assert m['dup'] == 1
+      assert m['class'] == 2
+      m['dup'] = 3
+      assert m['dup'] == 3
+      m['a.b'] = 4
+      assert m['a.b'] == 4
     end
 
 

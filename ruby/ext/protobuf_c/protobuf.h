@@ -110,6 +110,8 @@ extern VALUE cMessageBuilderContext;
 extern VALUE cEnumBuilderContext;
 extern VALUE cBuilder;
 
+extern const char* kDescriptorInstanceVar;
+
 void DescriptorPool_mark(void* _self);
 void DescriptorPool_free(void* _self);
 VALUE DescriptorPool_alloc(VALUE klass);
@@ -118,8 +120,6 @@ DescriptorPool* ruby_to_DescriptorPool(VALUE value);
 VALUE DescriptorPool_add(VALUE _self, VALUE def);
 VALUE DescriptorPool_build(VALUE _self);
 VALUE DescriptorPool_lookup(VALUE _self, VALUE name);
-VALUE DescriptorPool_get_class(VALUE _self, VALUE name);
-VALUE DescriptorPool_get_enum(VALUE _self, VALUE name);
 VALUE DescriptorPool_global_pool(VALUE _self);
 
 void Descriptor_mark(void* _self);
@@ -303,6 +303,8 @@ VALUE Message_dup(VALUE _self);
 VALUE Message_eq(VALUE _self, VALUE _other);
 VALUE Message_hash(VALUE _self);
 VALUE Message_inspect(VALUE _self);
+VALUE Message_index(VALUE _self, VALUE field_name);
+VALUE Message_index_set(VALUE _self, VALUE field_name, VALUE value);
 VALUE Message_descriptor(VALUE klass);
 VALUE Message_decode(VALUE klass, VALUE data);
 VALUE Message_encode(VALUE klass, VALUE msg_rb);

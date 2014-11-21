@@ -86,19 +86,31 @@ DEFINE_APPEND_HANDLER(uint64, uint64_t)
 DEFINE_APPEND_HANDLER(double, double)
 
 // Appends a string to a repeated field (a regular Ruby array for now).
-static size_t appendstr_handler(void *closure, const void *hd, const char *str,
-                                size_t len, const upb_bufhandle *handle) {
+static void* appendstr_handler(void *closure,
+                               const void *hd,
+                               size_t size_hint) {
   VALUE ary = (VALUE)closure;
-  RepeatedField_push(ary, rb_str_new(str, len));
-  return len;
+  VALUE str = rb_str_new2("");
+  RepeatedField_push(ary, str);
+  return (void*)str;
 }
 
 // Sets a non-repeated string field in a message.
-static size_t str_handler(void *closure, const void *hd, const char *str,
-                          size_t len, const upb_bufhandle *handle) {
+static void* str_handler(void *closure,
+                         const void *hd,
+                         size_t size_hint) {
   MessageHeader* msg = closure;
   const size_t *ofs = hd;
-  DEREF(Message_data(msg), *ofs, VALUE) = rb_str_new(str, len);
+  VALUE str = rb_str_new2("");
+  DEREF(Message_data(msg), *ofs, VALUE) = str;
+  return (void*)str;
+}
+
+static size_t stringdata_handler(void* closure, const void* hd,
+                                 const char* str, size_t len,
+                                 const upb_bufhandle* handle) {
+  VALUE rb_str = (VALUE)closure;
+  rb_str_append(rb_str, rb_str_new(str, len));
   return len;
 }
 
@@ -180,8 +192,8 @@ static void add_handlers_for_message(const void *closure, upb_handlers *h) {
 
         case UPB_TYPE_STRING:
         case UPB_TYPE_BYTES:
-          // XXX: does't currently handle split buffers.
-          upb_handlers_setstring(h, f, appendstr_handler, NULL);
+          upb_handlers_setstartstr(h, f, appendstr_handler, NULL);
+          upb_handlers_setstring(h, f, stringdata_handler, NULL);
           break;
         case UPB_TYPE_MESSAGE: {
           upb_handlerattr attr = UPB_HANDLERATTR_INITIALIZER;
@@ -210,8 +222,8 @@ static void add_handlers_for_message(const void *closure, upb_handlers *h) {
       case UPB_TYPE_BYTES: {
         upb_handlerattr attr = UPB_HANDLERATTR_INITIALIZER;
         upb_handlerattr_sethandlerdata(&attr, newhandlerdata(h, offset));
-        // XXX: does't currently handle split buffers.
-        upb_handlers_setstring(h, f, str_handler, &attr);
+        upb_handlers_setstartstr(h, f, str_handler, &attr);
+        upb_handlers_setstring(h, f, stringdata_handler, &attr);
         upb_handlerattr_uninit(&attr);
         break;
       }
@@ -229,6 +241,10 @@ static void add_handlers_for_message(const void *closure, upb_handlers *h) {
 // Creates upb handlers for populating a message.
 static const upb_handlers *new_fill_handlers(Descriptor* desc,
                                              const void* owner) {
+  // TODO(cfallin, haberman): once upb gets a caching/memoization layer for
+  // handlers, reuse subdef handlers so that e.g. if we already parse
+  // B-with-field-of-type-C, we don't have to rebuild the whole hierarchy to
+  // parse A-with-field-of-type-B-with-field-of-type-C.
   return upb_handlers_newfrozen(desc->msgdef, owner,
                                 add_handlers_for_message, NULL);
 }
@@ -256,7 +272,7 @@ static const upb_pbdecodermethod *msgdef_decodermethod(Descriptor* desc) {
 }
 
 VALUE Message_decode(VALUE klass, VALUE data) {
-  VALUE descriptor = rb_iv_get(klass, "@descriptor");
+  VALUE descriptor = rb_iv_get(klass, kDescriptorInstanceVar);
   Descriptor* desc = ruby_to_Descriptor(descriptor);
 
   if (TYPE(data) != T_STRING) {
@@ -381,7 +397,7 @@ static void putsubmsg(VALUE submsg, const upb_fielddef *f, upb_sink *sink,
   if (submsg == Qnil) return;
 
   upb_sink subsink;
-  VALUE descriptor = rb_iv_get(submsg, "@descriptor");
+  VALUE descriptor = rb_iv_get(submsg, kDescriptorInstanceVar);
   Descriptor* subdesc = ruby_to_Descriptor(descriptor);
 
   upb_sink_startsubmsg(sink, getsel(f, UPB_HANDLER_STARTSUBMSG), &subsink);
@@ -517,7 +533,7 @@ static const upb_handlers* msgdef_serialize_handlers(Descriptor* desc) {
 }
 
 VALUE Message_encode(VALUE klass, VALUE msg_rb) {
-  VALUE descriptor = rb_iv_get(klass, "@descriptor");
+  VALUE descriptor = rb_iv_get(klass, kDescriptorInstanceVar);
   Descriptor* desc = ruby_to_Descriptor(descriptor);
 
   stringsink sink;

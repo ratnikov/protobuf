@@ -54,7 +54,7 @@ rb_data_type_t Message_type = {
 };
 
 VALUE Message_alloc(VALUE klass) {
-  VALUE descriptor = rb_iv_get(klass, "@descriptor");
+  VALUE descriptor = rb_iv_get(klass, kDescriptorInstanceVar);
   Descriptor* desc = ruby_to_Descriptor(descriptor);
   MessageHeader* msg = (MessageHeader*)ALLOC_N(
       uint8_t, sizeof(MessageHeader) + desc->layout->size);
@@ -65,7 +65,7 @@ VALUE Message_alloc(VALUE klass) {
   VALUE ret = TypedData_Wrap_Struct(klass, &Message_type, msg);
   msg->descriptor_rb = descriptor;
   msg->descriptor = desc;
-  rb_iv_set(ret, "@descriptor", descriptor);
+  rb_iv_set(ret, kDescriptorInstanceVar, descriptor);
 
   layout_init(desc->layout, Message_data(msg));
 
@@ -87,25 +87,14 @@ VALUE Message_method_missing(int argc, VALUE* argv, VALUE _self) {
   size_t name_len = RSTRING_LEN(method_str);
   bool setter = false;
 
-  // Setters have names that end in '='. We temporarily strip this to do the
-  // name lookup, and restore it below.
+  // Setters have names that end in '='.
   if (name[name_len - 1] == '=') {
     setter = true;
-    name[name_len - 1] = 0;  // temporarily strip the =
+    name_len--;
   }
 
-  const upb_fielddef* f = upb_msgdef_ntofz(self->descriptor->msgdef, name);
-  // try with a stripped leading underscore -- this allows working around field
-  // name conflicts with builting Object method names.
-  if (f == NULL && name[0] == '_') {
-    name++;
-    f = upb_msgdef_ntofz(self->descriptor->msgdef, name);
-    name--;
-  }
-
-  if (setter) {
-    name[name_len - 1] = '=';
-  }
+  const upb_fielddef* f = upb_msgdef_ntof(self->descriptor->msgdef,
+                                          name, name_len);
 
   if (f == NULL) {
     rb_raise(rb_eArgError, "Unknown field");
@@ -118,8 +107,7 @@ VALUE Message_method_missing(int argc, VALUE* argv, VALUE _self) {
     layout_set(self->descriptor->layout, Message_data(self), f, argv[1]);
     return Qnil;
   } else {
-    VALUE ret = layout_get(self->descriptor->layout, Message_data(self), f);
-    return ret;
+    return layout_get(self->descriptor->layout, Message_data(self), f);
   }
 }
 
@@ -213,7 +201,6 @@ VALUE Message_inspect(VALUE _self) {
   MessageHeader* self;
   TypedData_Get_Struct(_self, MessageHeader, &Message_type, self);
 
-
   VALUE str = rb_str_new2("<");
   str = rb_str_append(str, rb_str_new2(rb_class2name(CLASS_OF(_self))));
   str = rb_str_cat2(str, ": ");
@@ -223,8 +210,33 @@ VALUE Message_inspect(VALUE _self) {
   return str;
 }
 
+VALUE Message_index(VALUE _self, VALUE field_name) {
+  MessageHeader* self;
+  TypedData_Get_Struct(_self, MessageHeader, &Message_type, self);
+  Check_Type(field_name, T_STRING);
+  const upb_fielddef* field =
+      upb_msgdef_ntofz(self->descriptor->msgdef, RSTRING_PTR(field_name));
+  if (field == NULL) {
+    return Qnil;
+  }
+  return layout_get(self->descriptor->layout, Message_data(self), field);
+}
+
+VALUE Message_index_set(VALUE _self, VALUE field_name, VALUE value) {
+  MessageHeader* self;
+  TypedData_Get_Struct(_self, MessageHeader, &Message_type, self);
+  Check_Type(field_name, T_STRING);
+  const upb_fielddef* field =
+      upb_msgdef_ntofz(self->descriptor->msgdef, RSTRING_PTR(field_name));
+  if (field == NULL) {
+    rb_raise(rb_eArgError, "Unknown field: %s", RSTRING_PTR(field_name));
+  }
+  layout_set(self->descriptor->layout, Message_data(self), field, value);
+  return Qnil;
+}
+
 VALUE Message_descriptor(VALUE klass) {
-  return rb_iv_get(klass, "@descriptor");
+  return rb_iv_get(klass, kDescriptorInstanceVar);
 }
 
 VALUE build_class_from_descriptor(Descriptor* desc) {
@@ -249,7 +261,7 @@ VALUE build_class_from_descriptor(Descriptor* desc) {
       // their own toplevel constant class name.
       rb_intern("Message"),
       rb_cObject);
-  rb_iv_set(klass, "@descriptor", get_def_obj(desc->msgdef));
+  rb_iv_set(klass, kDescriptorInstanceVar, get_def_obj(desc->msgdef));
   rb_define_alloc_func(klass, Message_alloc);
   rb_define_method(klass, "method_missing",
                    Message_method_missing, -1);
@@ -258,6 +270,8 @@ VALUE build_class_from_descriptor(Descriptor* desc) {
   rb_define_method(klass, "==", Message_eq, 1);
   rb_define_method(klass, "hash", Message_hash, 0);
   rb_define_method(klass, "inspect", Message_inspect, 0);
+  rb_define_method(klass, "[]", Message_index, 1);
+  rb_define_method(klass, "[]=", Message_index_set, 2);
   rb_define_singleton_method(klass, "decode", Message_decode, 1);
   rb_define_singleton_method(klass, "encode", Message_encode, 1);
   rb_define_singleton_method(klass, "descriptor", Message_descriptor, 0);
@@ -266,7 +280,7 @@ VALUE build_class_from_descriptor(Descriptor* desc) {
 
 VALUE enum_lookup(VALUE self, VALUE number) {
   int32_t num = NUM2INT(number);
-  VALUE desc = rb_iv_get(self, "@descriptor");
+  VALUE desc = rb_iv_get(self, kDescriptorInstanceVar);
   EnumDescriptor* enumdesc = ruby_to_EnumDescriptor(desc);
 
   const char* name = upb_enumdef_iton(enumdesc->enumdef, num);
@@ -279,7 +293,7 @@ VALUE enum_lookup(VALUE self, VALUE number) {
 
 VALUE enum_resolve(VALUE self, VALUE sym) {
   const char* name = rb_id2name(SYM2ID(sym));
-  VALUE desc = rb_iv_get(self, "@descriptor");
+  VALUE desc = rb_iv_get(self, kDescriptorInstanceVar);
   EnumDescriptor* enumdesc = ruby_to_EnumDescriptor(desc);
 
   int32_t num = 0;
@@ -292,7 +306,7 @@ VALUE enum_resolve(VALUE self, VALUE sym) {
 }
 
 VALUE enum_descriptor(VALUE self) {
-  return rb_iv_get(self, "@descriptor");
+  return rb_iv_get(self, kDescriptorInstanceVar);
 }
 
 VALUE build_module_from_enumdesc(EnumDescriptor* enumdesc) {
@@ -317,7 +331,7 @@ VALUE build_module_from_enumdesc(EnumDescriptor* enumdesc) {
   rb_define_singleton_method(mod, "lookup", enum_lookup, 1);
   rb_define_singleton_method(mod, "resolve", enum_resolve, 1);
   rb_define_singleton_method(mod, "descriptor", enum_descriptor, 0);
-  rb_iv_set(mod, "@descriptor", get_def_obj(enumdesc->enumdef));
+  rb_iv_set(mod, kDescriptorInstanceVar, get_def_obj(enumdesc->enumdef));
 
   return mod;
 }

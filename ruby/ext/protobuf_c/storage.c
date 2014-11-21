@@ -36,6 +36,8 @@
 // Ruby <-> native slot management.
 // -----------------------------------------------------------------------------
 
+#define DEREF(memory, type) *(type*)(memory)
+
 size_t native_slot_size(upb_fieldtype_t type) {
   switch (type) {
     case UPB_TYPE_FLOAT:   return 4;
@@ -65,31 +67,33 @@ static void check_int_range_precision(upb_fieldtype_t type, VALUE val) {
     }
   }
   if (type == UPB_TYPE_UINT32 || type == UPB_TYPE_UINT64) {
-    if (rb_funcall(val, rb_intern("<"), 1, INT2NUM(0)) == Qtrue) {
+    if (NUM2DBL(val) < 0) {
       rb_raise(rb_eRangeError,
                "Assigning negative value to unsigned integer field.");
     }
   }
 }
 
+static bool is_ruby_num(VALUE value) {
+  return (TYPE(value) == T_FLOAT ||
+          TYPE(value) == T_FIXNUM ||
+          TYPE(value) == T_BIGNUM);
+}
+
 void native_slot_set(upb_fieldtype_t type, VALUE type_class,
                      void* memory, VALUE value) {
   switch (type) {
     case UPB_TYPE_FLOAT:
-      if (TYPE(value) != T_FLOAT &&
-          TYPE(value) != T_FIXNUM &&
-          TYPE(value) != T_BIGNUM) {
+      if (!is_ruby_num(value)) {
         rb_raise(rb_eTypeError, "Expected number type for float field.");
       }
-      *((float *)memory) = NUM2DBL(value);
+      DEREF(memory, float) = NUM2DBL(value);
       break;
     case UPB_TYPE_DOUBLE:
-      if (TYPE(value) != T_FLOAT &&
-          TYPE(value) != T_FIXNUM &&
-          TYPE(value) != T_BIGNUM) {
+      if (!is_ruby_num(value)) {
         rb_raise(rb_eTypeError, "Expected number type for double field.");
       }
-      *((double *)memory) = NUM2DBL(value);
+      DEREF(memory, double) = NUM2DBL(value);
       break;
     case UPB_TYPE_BOOL: {
       int8_t val = -1;
@@ -100,7 +104,7 @@ void native_slot_set(upb_fieldtype_t type, VALUE type_class,
       } else {
         rb_raise(rb_eTypeError, "Invalid argument for boolean field.");
       }
-      *((int8_t *)memory) = val;
+      DEREF(memory, int8_t) = val;
       break;
     }
     case UPB_TYPE_STRING:
@@ -110,7 +114,7 @@ void native_slot_set(upb_fieldtype_t type, VALUE type_class,
       }
       // TODO(cfallin): convert encoding to UTF-8 for STRING and US-ASCII-8 for
       // BYTES.
-      *((VALUE *)memory) = value;
+      DEREF(memory, VALUE) = value;
       break;
     }
     case UPB_TYPE_MESSAGE: {
@@ -119,13 +123,11 @@ void native_slot_set(upb_fieldtype_t type, VALUE type_class,
                  "Invalid type %s to assign to submessage field.",
                  rb_class2name(CLASS_OF(value)));
       }
-      *((VALUE *)memory) = value;
+      DEREF(memory, VALUE) = value;
       break;
     }
     case UPB_TYPE_ENUM: {
-      if (TYPE(value) != T_FIXNUM &&
-          TYPE(value) != T_BIGNUM &&
-          TYPE(value) != T_SYMBOL) {
+      if (!is_ruby_num(value) && TYPE(value) != T_SYMBOL) {
         rb_raise(rb_eTypeError,
                  "Expected number or symbol type for enum field.");
       }
@@ -142,31 +144,29 @@ void native_slot_set(upb_fieldtype_t type, VALUE type_class,
         check_int_range_precision(UPB_TYPE_INT32, value);
         int_val = NUM2INT(value);
       }
-      *((int32_t *)memory) = int_val;
+      DEREF(memory, int32_t) = int_val;
       break;
     }
     case UPB_TYPE_INT32:
     case UPB_TYPE_INT64:
     case UPB_TYPE_UINT32:
     case UPB_TYPE_UINT64:
-      if (TYPE(value) != T_FLOAT &&
-          TYPE(value) != T_FIXNUM &&
-          TYPE(value) != T_BIGNUM) {
+      if (!is_ruby_num(value)) {
         rb_raise(rb_eTypeError, "Expected number type for integral field.");
       }
       check_int_range_precision(type, value);
       switch (type) {
-        case UPB_TYPE_INT32:
-        *((int32_t *)memory) = NUM2INT(value);
+      case UPB_TYPE_INT32:
+        DEREF(memory, int32_t) = NUM2INT(value);
         break;
       case UPB_TYPE_INT64:
-        *((int64_t *)memory) = NUM2LL(value);
+        DEREF(memory, int64_t) = NUM2LL(value);
         break;
       case UPB_TYPE_UINT32:
-        *((uint32_t *)memory) = NUM2UINT(value);
+        DEREF(memory, uint32_t) = NUM2UINT(value);
         break;
       case UPB_TYPE_UINT64:
-        *((uint64_t *)memory) = NUM2ULL(value);
+        DEREF(memory, uint64_t) = NUM2ULL(value);
         break;
       default:
         break;
@@ -180,17 +180,17 @@ void native_slot_set(upb_fieldtype_t type, VALUE type_class,
 VALUE native_slot_get(upb_fieldtype_t type, VALUE type_class, void* memory) {
   switch (type) {
     case UPB_TYPE_FLOAT:
-      return DBL2NUM(*((float *)memory));
+      return DBL2NUM(DEREF(memory, float));
     case UPB_TYPE_DOUBLE:
-      return DBL2NUM(*((double *)memory));
+      return DBL2NUM(DEREF(memory, double));
     case UPB_TYPE_BOOL:
-      return *((int8_t *)memory) ? Qtrue : Qfalse;
+      return DEREF(memory, int8_t) ? Qtrue : Qfalse;
     case UPB_TYPE_STRING:
     case UPB_TYPE_BYTES:
     case UPB_TYPE_MESSAGE:
       return *((VALUE *)memory);
     case UPB_TYPE_ENUM: {
-      int32_t val = *((int32_t *)memory);
+      int32_t val = DEREF(memory, int32_t);
       VALUE symbol = enum_lookup(type_class, INT2NUM(val));
       if (symbol == Qnil) {
         return INT2NUM(val);
@@ -199,13 +199,13 @@ VALUE native_slot_get(upb_fieldtype_t type, VALUE type_class, void* memory) {
       }
     }
     case UPB_TYPE_INT32:
-      return INT2NUM(*((int32_t *)memory));
+      return INT2NUM(DEREF(memory, int32_t));
     case UPB_TYPE_INT64:
-      return LL2NUM(*((int64_t *)memory));
+      return LL2NUM(DEREF(memory, int64_t));
     case UPB_TYPE_UINT32:
-      return UINT2NUM(*((uint32_t *)memory));
+      return UINT2NUM(DEREF(memory, uint32_t));
     case UPB_TYPE_UINT64:
-      return ULL2NUM(*((uint64_t *)memory));
+      return ULL2NUM(DEREF(memory, uint64_t));
     default:
       return Qnil;
   }
@@ -214,34 +214,34 @@ VALUE native_slot_get(upb_fieldtype_t type, VALUE type_class, void* memory) {
 void native_slot_init(upb_fieldtype_t type, void* memory) {
   switch (type) {
     case UPB_TYPE_FLOAT:
-      *((float *)memory) = 0.0;
+      DEREF(memory, float) = 0.0;
       break;
     case UPB_TYPE_DOUBLE:
-      *((double *)memory) = 0.0;
+      DEREF(memory, double) = 0.0;
       break;
     case UPB_TYPE_BOOL:
-      *((int8_t *)memory) = 0;
+      DEREF(memory, int8_t) = 0;
       break;
     case UPB_TYPE_STRING:
     case UPB_TYPE_BYTES:
       // TODO(cfallin): set encoding appropriately
-      *((VALUE *)memory) = rb_str_new2("");
+      DEREF(memory, VALUE) = rb_str_new2("");
       break;
     case UPB_TYPE_MESSAGE:
-      *((VALUE *)memory) = Qnil;
+      DEREF(memory, VALUE) = Qnil;
       break;
     case UPB_TYPE_ENUM:
     case UPB_TYPE_INT32:
-      *((int32_t *)memory) = 0;
+      DEREF(memory, int32_t) = 0;
       break;
     case UPB_TYPE_INT64:
-      *((int64_t *)memory) = 0;
+      DEREF(memory, int64_t) = 0;
       break;
     case UPB_TYPE_UINT32:
-      *((uint32_t *)memory) = 0;
+      DEREF(memory, uint32_t) = 0;
       break;
     case UPB_TYPE_UINT64:
-      *((uint64_t *)memory) = 0;
+      DEREF(memory, uint64_t) = 0;
       break;
     default:
       break;
@@ -253,7 +253,7 @@ void native_slot_mark(upb_fieldtype_t type, void* memory) {
     case UPB_TYPE_STRING:
     case UPB_TYPE_BYTES:
     case UPB_TYPE_MESSAGE:
-      rb_gc_mark(*(VALUE *)memory);
+      rb_gc_mark(DEREF(memory, VALUE));
       break;
     default:
       break;
@@ -265,8 +265,8 @@ void native_slot_dup(upb_fieldtype_t type, void* to, void* from) {
     case UPB_TYPE_STRING:
     case UPB_TYPE_BYTES:
     case UPB_TYPE_MESSAGE: {
-      VALUE from_val = *((VALUE *)from);
-      *((VALUE *)to) = (from_val != Qnil) ?
+      VALUE from_val = DEREF(from, VALUE);
+      DEREF(to, VALUE) = (from_val != Qnil) ?
           rb_funcall(from_val, rb_intern("dup"), 0) : Qnil;
       break;
     }
@@ -280,8 +280,8 @@ bool native_slot_eq(upb_fieldtype_t type, void* mem1, void* mem2) {
     case UPB_TYPE_STRING:
     case UPB_TYPE_BYTES:
     case UPB_TYPE_MESSAGE: {
-      VALUE val1 = *((VALUE *)mem1);
-      VALUE val2 = *((VALUE *)mem2);
+      VALUE val1 = DEREF(mem1, VALUE);
+      VALUE val2 = DEREF(mem2, VALUE);
       VALUE ret = rb_funcall(val1, rb_intern("=="), 1, val2);
       return ret == Qtrue;
     }
@@ -337,11 +337,11 @@ VALUE layout_get(MessageLayout* layout,
     VALUE type_class = Qnil;
     if (upb_fielddef_type(field) == UPB_TYPE_MESSAGE) {
       Descriptor* submsgdesc =
-          ruby_to_Descriptor(get_def_obj((void *)upb_fielddef_subdef(field)));
+          ruby_to_Descriptor(get_def_obj(upb_fielddef_subdef(field)));
       type_class = submsgdesc->klass;
     } else if (upb_fielddef_type(field) == UPB_TYPE_ENUM) {
       EnumDescriptor* subenumdesc =
-          ruby_to_EnumDescriptor(get_def_obj((void *)upb_fielddef_subdef(field)));
+          ruby_to_EnumDescriptor(get_def_obj(upb_fielddef_subdef(field)));
       type_class = subenumdesc->module;
     }
     return native_slot_get(upb_fielddef_type(field),
@@ -367,7 +367,7 @@ static void check_repeated_field_type(VALUE val, const upb_fielddef* field) {
       upb_fielddef_type(field) == UPB_TYPE_ENUM) {
     RepeatedField* self = ruby_to_RepeatedField(val);
     if (self->field_type_class !=
-        get_def_obj((void *)upb_fielddef_subdef(field))) {
+        get_def_obj(upb_fielddef_subdef(field))) {
       rb_raise(rb_eTypeError,
                "Repeated field array has wrong message/enum class");
     }
@@ -387,11 +387,11 @@ void layout_set(MessageLayout* layout,
     VALUE type_class = Qnil;
     if (upb_fielddef_type(field) == UPB_TYPE_MESSAGE) {
       Descriptor* submsgdesc =
-          ruby_to_Descriptor(get_def_obj((void *)upb_fielddef_subdef(field)));
+          ruby_to_Descriptor(get_def_obj(upb_fielddef_subdef(field)));
       type_class = submsgdesc->klass;
     } else if (upb_fielddef_type(field) == UPB_TYPE_ENUM) {
       EnumDescriptor* subenumdesc =
-          ruby_to_EnumDescriptor(get_def_obj((void *)upb_fielddef_subdef(field)));
+          ruby_to_EnumDescriptor(get_def_obj(upb_fielddef_subdef(field)));
       type_class = subenumdesc->module;
     }
     native_slot_set(upb_fielddef_type(field), type_class, memory, val);
@@ -412,13 +412,13 @@ void layout_init(MessageLayout* layout,
       VALUE ary = Qnil;
       if (upb_fielddef_type(field) == UPB_TYPE_MESSAGE) {
         Descriptor* submsgdesc =
-            ruby_to_Descriptor(get_def_obj((void *)upb_fielddef_subdef(field)));
+            ruby_to_Descriptor(get_def_obj(upb_fielddef_subdef(field)));
         VALUE type_class = submsgdesc->klass;
         VALUE args[2] = { ID2SYM(rb_intern("message")), type_class };
         ary = rb_class_new_instance(2, args, cRepeatedField);
       } else if (upb_fielddef_type(field) == UPB_TYPE_ENUM) {
         EnumDescriptor* subenumdesc =
-            ruby_to_EnumDescriptor(get_def_obj((void *)upb_fielddef_subdef(field)));
+            ruby_to_EnumDescriptor(get_def_obj(upb_fielddef_subdef(field)));
         VALUE type_class = subenumdesc->module;
         VALUE args[2] = { ID2SYM(rb_intern("enum")), type_class };
         ary = rb_class_new_instance(2, args, cRepeatedField);

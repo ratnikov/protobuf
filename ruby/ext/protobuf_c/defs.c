@@ -34,6 +34,8 @@
 // Common utilities.
 // -----------------------------------------------------------------------------
 
+const char* kDescriptorInstanceVar = "descriptor";
+
 static const char* get_str(VALUE str) {
   Check_Type(str, T_STRING);
   return RSTRING_PTR(str);
@@ -101,8 +103,6 @@ void DescriptorPool_register(VALUE module) {
   rb_define_method(klass, "add", DescriptorPool_add, 1);
   rb_define_method(klass, "build", DescriptorPool_build, 0);
   rb_define_method(klass, "lookup", DescriptorPool_lookup, 1);
-  rb_define_method(klass, "get_class", DescriptorPool_get_class, 1);
-  rb_define_method(klass, "get_enum", DescriptorPool_get_enum, 1);
   rb_define_singleton_method(klass, "global_pool",
                              DescriptorPool_global_pool, 0);
   cDescriptorPool = klass;
@@ -125,8 +125,24 @@ static void add_enumdesc_to_pool(DescriptorPool* self,
   check_upb_status(&s, "Adding EnumDescriptor to DescriptorPool failed");
 }
 
+static void create_ruby_class_or_module(VALUE def) {
+  VALUE def_klass = rb_obj_class(def);
+  if (def_klass == cDescriptor) {
+    Descriptor* desc = ruby_to_Descriptor(def);
+    if (desc->klass == Qnil) {
+      desc->klass = build_class_from_descriptor(desc);
+    }
+  } else if (def_klass == cEnumDescriptor) {
+    EnumDescriptor* enumdesc = ruby_to_EnumDescriptor(def);
+    if (enumdesc->module == Qnil) {
+      enumdesc->module = build_module_from_enumdesc(enumdesc);
+    }
+  }
+}
+
 VALUE DescriptorPool_add(VALUE _self, VALUE def) {
   DEFINE_SELF(DescriptorPool, self, _self);
+  create_ruby_class_or_module(def);
   VALUE def_klass = rb_obj_class(def);
   if (def_klass == cDescriptor) {
     add_descriptor_to_pool(self, ruby_to_Descriptor(def));
@@ -155,38 +171,6 @@ VALUE DescriptorPool_lookup(VALUE _self, VALUE name) {
     return Qnil;
   }
   return get_def_obj(def);
-}
-
-VALUE DescriptorPool_get_class(VALUE _self, VALUE name) {
-  VALUE def_rb = DescriptorPool_lookup(_self, name);
-  if (def_rb == Qnil) {
-    // Message type not found by name.
-    return Qnil;
-  }
-  if (CLASS_OF(def_rb) != cDescriptor) {
-    rb_raise(rb_eTypeError, "Name does not name a message type.");
-  }
-  Descriptor* desc = ruby_to_Descriptor(def_rb);
-  if (desc->klass == Qnil) {
-    desc->klass = build_class_from_descriptor(desc);
-  }
-  return desc->klass;
-}
-
-VALUE DescriptorPool_get_enum(VALUE _self, VALUE name) {
-  VALUE def_rb = DescriptorPool_lookup(_self, name);
-  if (def_rb == Qnil) {
-    // Enum not found by name.
-    return Qnil;
-  }
-  if (CLASS_OF(def_rb) != cEnumDescriptor) {
-    rb_raise(rb_eTypeError, "Name does not name an enum type.");
-  }
-  EnumDescriptor* enumdesc = ruby_to_EnumDescriptor(def_rb);
-  if (enumdesc->module == Qnil) {
-    enumdesc->module = build_module_from_enumdesc(enumdesc);
-  }
-  return enumdesc->module;
 }
 
 VALUE DescriptorPool_global_pool(VALUE _self) {
@@ -893,9 +877,8 @@ VALUE Builder_finalize_to_pool(VALUE _self, VALUE pool_rb) {
 
   DescriptorPool* pool = ruby_to_DescriptorPool(pool_rb);
 
-  xfree(self->defs);  // may be left-over due to previous exception
-  self->defs = ALLOC_N(upb_def*,
-                       RARRAY_LEN(self->pending_list));
+  REALLOC_N(self->defs, upb_def*, RARRAY_LEN(self->pending_list));
+
   for (int i = 0; i < RARRAY_LEN(self->pending_list); i++) {
     VALUE def_rb = rb_ary_entry(self->pending_list, i);
     if (CLASS_OF(def_rb) == cDescriptor) {
@@ -917,8 +900,14 @@ VALUE Builder_finalize_to_pool(VALUE _self, VALUE pool_rb) {
     add_def_obj(self->defs[i], def_rb);
   }
 
+  // Do this in a second pass so that if parser creation requires lookup of
+  // other defs in this batch, they will already have been placed in the def_obj
+  // map.
+  for (int i = 0; i < RARRAY_LEN(self->pending_list); i++) {
+    VALUE def_rb = rb_ary_entry(self->pending_list, i);
+    create_ruby_class_or_module(def_rb);
+  }
+
   self->pending_list = rb_ary_new();
-  xfree(self->defs);
-  self->defs = NULL;
   return Qnil;
 }
