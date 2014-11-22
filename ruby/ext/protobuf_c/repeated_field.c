@@ -169,6 +169,22 @@ VALUE RepeatedField_insert(int argc, VALUE* argv, VALUE _self) {
   return Qnil;
 }
 
+VALUE RepeatedField_replace(VALUE _self, VALUE list) {
+  RepeatedField* self = ruby_to_RepeatedField(_self);
+  Check_Type(list, T_ARRAY);
+  self->size = 0;
+  for (int i = 0; i < RARRAY_LEN(list); i++) {
+    RepeatedField_push(_self, rb_ary_entry(list, i));
+  }
+  return Qnil;
+}
+
+VALUE RepeatedField_clear(VALUE _self) {
+  RepeatedField* self = ruby_to_RepeatedField(_self);
+  self->size = 0;
+  return Qnil;
+}
+
 VALUE RepeatedField_length(VALUE _self) {
   RepeatedField* self = ruby_to_RepeatedField(_self);
   return INT2NUM(self->size);
@@ -448,6 +464,8 @@ void RepeatedField_register(VALUE module) {
   rb_define_method(klass, "push", RepeatedField_push, 1);
   rb_define_method(klass, "pop", RepeatedField_pop, 0);
   rb_define_method(klass, "insert", RepeatedField_insert, -1);
+  rb_define_method(klass, "replace", RepeatedField_replace, 1);
+  rb_define_method(klass, "clear", RepeatedField_clear, 0);
   rb_define_method(klass, "length", RepeatedField_length, 0);
   rb_define_method(klass, "dup", RepeatedField_dup, 0);
   rb_define_method(klass, "==", RepeatedField_eq, 1);

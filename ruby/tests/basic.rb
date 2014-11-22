@@ -209,6 +209,12 @@ module BasicTest
         assert l3[i] == l[i]
         assert l3[l.count + i] == l[i]
       end
+
+      l.clear
+      assert l.count == 0
+      l += [1, 2, 3, 4]
+      l.replace([5, 6, 7, 8])
+      assert l == [5, 6, 7, 8]
     end
 
     def test_rptfield_msg

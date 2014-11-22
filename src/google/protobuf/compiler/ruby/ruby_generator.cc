@@ -270,7 +270,7 @@ void GenerateFile(const google::protobuf::FileDescriptor* file,
   }
 
   printer->Print(
-    "Google::Protobuf::SymbolTable.global_symtab.build do\n");
+    "Google::Protobuf::DescriptorPool.global_pool.build do\n");
   printer->Indent();
   for (int i = 0; i < file->message_type_count(); i++) {
     GenerateMessage(file->message_type(i), printer);

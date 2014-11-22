@@ -247,6 +247,8 @@ VALUE RepeatedField_push(VALUE _self, VALUE val);
 void RepeatedField_push_native(VALUE _self, void* data);
 VALUE RepeatedField_pop(VALUE _self);
 VALUE RepeatedField_insert(int argc, VALUE* argv, VALUE _self);
+VALUE RepeatedField_replace(VALUE _self, VALUE list);
+VALUE RepeatedField_clear(VALUE _self);
 VALUE RepeatedField_length(VALUE _self);
 VALUE RepeatedField_dup(VALUE _self);
 VALUE RepeatedField_eq(VALUE _self, VALUE _other);
