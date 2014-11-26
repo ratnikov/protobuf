@@ -326,6 +326,20 @@ void free_layout(MessageLayout* layout) {
   xfree(layout);
 }
 
+static VALUE get_type_class(const upb_fielddef* field) {
+  VALUE type_class = Qnil;
+  if (upb_fielddef_type(field) == UPB_TYPE_MESSAGE) {
+    VALUE submsgdesc =
+        get_def_obj(upb_fielddef_subdef(field));
+    type_class = Descriptor_msgclass(submsgdesc);
+  } else if (upb_fielddef_type(field) == UPB_TYPE_ENUM) {
+    VALUE subenumdesc =
+        get_def_obj(upb_fielddef_subdef(field));
+    type_class = EnumDescriptor_enummodule(subenumdesc);
+  }
+  return type_class;
+}
+
 VALUE layout_get(MessageLayout* layout,
                  void* storage,
                  const upb_fielddef* field) {
@@ -334,18 +348,8 @@ VALUE layout_get(MessageLayout* layout,
   if (upb_fielddef_label(field) == UPB_LABEL_REPEATED) {
     return *((VALUE *)memory);
   } else {
-    VALUE type_class = Qnil;
-    if (upb_fielddef_type(field) == UPB_TYPE_MESSAGE) {
-      Descriptor* submsgdesc =
-          ruby_to_Descriptor(get_def_obj(upb_fielddef_subdef(field)));
-      type_class = submsgdesc->klass;
-    } else if (upb_fielddef_type(field) == UPB_TYPE_ENUM) {
-      EnumDescriptor* subenumdesc =
-          ruby_to_EnumDescriptor(get_def_obj(upb_fielddef_subdef(field)));
-      type_class = subenumdesc->module;
-    }
     return native_slot_get(upb_fielddef_type(field),
-                           type_class,
+                           get_type_class(field),
                            memory);
   }
 }
@@ -384,17 +388,8 @@ void layout_set(MessageLayout* layout,
     check_repeated_field_type(val, field);
     *((VALUE *)memory) = val;
   } else {
-    VALUE type_class = Qnil;
-    if (upb_fielddef_type(field) == UPB_TYPE_MESSAGE) {
-      Descriptor* submsgdesc =
-          ruby_to_Descriptor(get_def_obj(upb_fielddef_subdef(field)));
-      type_class = submsgdesc->klass;
-    } else if (upb_fielddef_type(field) == UPB_TYPE_ENUM) {
-      EnumDescriptor* subenumdesc =
-          ruby_to_EnumDescriptor(get_def_obj(upb_fielddef_subdef(field)));
-      type_class = subenumdesc->module;
-    }
-    native_slot_set(upb_fielddef_type(field), type_class, memory, val);
+    native_slot_set(upb_fielddef_type(field), get_type_class(field),
+                    memory, val);
   }
 }
 
@@ -410,17 +405,12 @@ void layout_init(MessageLayout* layout,
 
     if (upb_fielddef_label(field) == UPB_LABEL_REPEATED) {
       VALUE ary = Qnil;
-      if (upb_fielddef_type(field) == UPB_TYPE_MESSAGE) {
-        Descriptor* submsgdesc =
-            ruby_to_Descriptor(get_def_obj(upb_fielddef_subdef(field)));
-        VALUE type_class = submsgdesc->klass;
-        VALUE args[2] = { ID2SYM(rb_intern("message")), type_class };
-        ary = rb_class_new_instance(2, args, cRepeatedField);
-      } else if (upb_fielddef_type(field) == UPB_TYPE_ENUM) {
-        EnumDescriptor* subenumdesc =
-            ruby_to_EnumDescriptor(get_def_obj(upb_fielddef_subdef(field)));
-        VALUE type_class = subenumdesc->module;
-        VALUE args[2] = { ID2SYM(rb_intern("enum")), type_class };
+      VALUE type_class = get_type_class(field);
+      if (type_class != Qnil) {
+        VALUE args[2] = {
+          fieldtype_to_ruby(upb_fielddef_type(field)),
+          type_class,
+        };
         ary = rb_class_new_instance(2, args, cRepeatedField);
       } else {
         VALUE args[1] = { fieldtype_to_ruby(upb_fielddef_type(field)) };

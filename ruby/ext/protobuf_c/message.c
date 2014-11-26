@@ -40,7 +40,6 @@ void* Message_data(void* msg) {
 
 void Message_mark(void* _self) {
   MessageHeader* self = (MessageHeader *)_self;
-  rb_gc_mark(self->descriptor_rb);
   layout_mark(self->descriptor->layout, Message_data(self));
 }
 
@@ -63,7 +62,6 @@ VALUE Message_alloc(VALUE klass) {
   // We wrap first so that everything in the message object is GC-rooted in case
   // a collection happens during object creation in layout_init().
   VALUE ret = TypedData_Wrap_Struct(klass, &Message_type, msg);
-  msg->descriptor_rb = descriptor;
   msg->descriptor = desc;
   rb_iv_set(ret, kDescriptorInstanceVar, descriptor);
 
@@ -72,6 +70,19 @@ VALUE Message_alloc(VALUE klass) {
   return ret;
 }
 
+/*
+ * call-seq:
+ *     Message.method_missing(*args)
+ *
+ * Provides accessors and setters for message fields according to their field
+ * names. For any field whose name does not conflict with a built-in method, an
+ * accessor is provided with the same name as the field, and a setter is
+ * provided with the name of the field plus the '=' suffix. Thus, given a
+ * message instance 'msg' with field 'foo', the following code is valid:
+ *
+ *     msg.foo = 42
+ *     puts msg.foo
+ */
 VALUE Message_method_missing(int argc, VALUE* argv, VALUE _self) {
   MessageHeader* self;
   TypedData_Get_Struct(_self, MessageHeader, &Message_type, self);
@@ -143,6 +154,18 @@ int Message_initialize_kwarg(VALUE key, VALUE val, VALUE _self) {
   return 0;
 }
 
+/*
+ * call-seq:
+ *     Message.new(kwargs) => new_message
+ *
+ * Creates a new instance of the given message class. Keyword arguments may be
+ * provided with keywords corresponding to field names.
+ *
+ * Note that no literal Message class exists. Only concrete classes per message
+ * type exist, as provided by the #msgclass method on Descriptors after they
+ * have been added to a pool. The method definitions described here on the
+ * Message class are provided on each concrete message class.
+ */
 VALUE Message_initialize(int argc, VALUE* argv, VALUE _self) {
   if (argc == 0) {
     return Qnil;
@@ -159,6 +182,12 @@ VALUE Message_initialize(int argc, VALUE* argv, VALUE _self) {
   return Qnil;
 }
 
+/*
+ * call-seq:
+ *     Message.dup => new_message
+ *
+ * Performs a deep copy of this message and returns the new copy.
+ */
 VALUE Message_dup(VALUE _self) {
   MessageHeader* self;
   TypedData_Get_Struct(_self, MessageHeader, &Message_type, self);
@@ -174,6 +203,15 @@ VALUE Message_dup(VALUE _self) {
   return new_msg;
 }
 
+/*
+ * call-seq:
+ *     Message.==(other) => boolean
+ *
+ * Performs a deep comparison of this message with another. Messages are equal
+ * if they have the same type and if each field is equal according to the :==
+ * method's semantics (a more efficient comparison may actually be done if the
+ * field is of a primitive type).
+ */
 VALUE Message_eq(VALUE _self, VALUE _other) {
   MessageHeader* self;
   TypedData_Get_Struct(_self, MessageHeader, &Message_type, self);
@@ -190,6 +228,12 @@ VALUE Message_eq(VALUE _self, VALUE _other) {
                    Message_data(other));
 }
 
+/*
+ * call-seq:
+ *     Message.hash => hash_value
+ *
+ * Returns a hash value that represents this message's field values.
+ */
 VALUE Message_hash(VALUE _self) {
   MessageHeader* self;
   TypedData_Get_Struct(_self, MessageHeader, &Message_type, self);
@@ -197,6 +241,14 @@ VALUE Message_hash(VALUE _self) {
   return layout_hash(self->descriptor->layout, Message_data(self));
 }
 
+/*
+ * call-seq:
+ *     Message.inspect => string
+ *
+ * Returns a human-readable string representing this message. It will be
+ * formatted as "<MessageType: field1: value1, field2: value2, ...>". Each
+ * field's value is represented according to its own #inspect method.
+ */
 VALUE Message_inspect(VALUE _self) {
   MessageHeader* self;
   TypedData_Get_Struct(_self, MessageHeader, &Message_type, self);
@@ -210,6 +262,13 @@ VALUE Message_inspect(VALUE _self) {
   return str;
 }
 
+/*
+ * call-seq:
+ *     Message.[](index) => value
+ *
+ * Accesses a field's value by field name. The provided field name should be a
+ * string.
+ */
 VALUE Message_index(VALUE _self, VALUE field_name) {
   MessageHeader* self;
   TypedData_Get_Struct(_self, MessageHeader, &Message_type, self);
@@ -222,6 +281,13 @@ VALUE Message_index(VALUE _self, VALUE field_name) {
   return layout_get(self->descriptor->layout, Message_data(self), field);
 }
 
+/*
+ * call-seq:
+ *     Message.[]=(index, value)
+ *
+ * Sets a field's value by field name. The provided field name should be a
+ * string.
+ */
 VALUE Message_index_set(VALUE _self, VALUE field_name, VALUE value) {
   MessageHeader* self;
   TypedData_Get_Struct(_self, MessageHeader, &Message_type, self);
@@ -235,6 +301,13 @@ VALUE Message_index_set(VALUE _self, VALUE field_name, VALUE value) {
   return Qnil;
 }
 
+/*
+ * call-seq:
+ *     Message.descriptor => descriptor
+ *
+ * Class method that returns the Descriptor instance corresponding to this
+ * message class's type.
+ */
 VALUE Message_descriptor(VALUE klass) {
   return rb_iv_get(klass, kDescriptorInstanceVar);
 }
@@ -278,6 +351,13 @@ VALUE build_class_from_descriptor(Descriptor* desc) {
   return klass;
 }
 
+/*
+ * call-seq:
+ *     Enum.lookup(number) => name
+ *
+ * This module method, provided on each generated enum module, looks up an enum
+ * value by number and returns its name as a Ruby symbol, or nil if not found.
+ */
 VALUE enum_lookup(VALUE self, VALUE number) {
   int32_t num = NUM2INT(number);
   VALUE desc = rb_iv_get(self, kDescriptorInstanceVar);
@@ -291,6 +371,13 @@ VALUE enum_lookup(VALUE self, VALUE number) {
   }
 }
 
+/*
+ * call-seq:
+ *     Enum.resolve(name) => number
+ *
+ * This module method, provided on each generated enum module, looks up an enum
+ * value by name (as a Ruby symbol) and returns its name, or nil if not found.
+ */
 VALUE enum_resolve(VALUE self, VALUE sym) {
   const char* name = rb_id2name(SYM2ID(sym));
   VALUE desc = rb_iv_get(self, kDescriptorInstanceVar);
@@ -305,6 +392,13 @@ VALUE enum_resolve(VALUE self, VALUE sym) {
   }
 }
 
+/*
+ * call-seq:
+ *     Enum.descriptor
+ *
+ * This module method, provided on each generated enum module, returns the
+ * EnumDescriptor corresponding to this enum type.
+ */
 VALUE enum_descriptor(VALUE self) {
   return rb_iv_get(self, kDescriptorInstanceVar);
 }

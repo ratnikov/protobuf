@@ -110,7 +110,7 @@ static size_t stringdata_handler(void* closure, const void* hd,
                                  const char* str, size_t len,
                                  const upb_bufhandle* handle) {
   VALUE rb_str = (VALUE)closure;
-  rb_str_append(rb_str, rb_str_new(str, len));
+  rb_str_cat(rb_str, str, len);
   return len;
 }
 
@@ -118,10 +118,11 @@ static size_t stringdata_handler(void* closure, const void* hd,
 static void *appendsubmsg_handler(void *closure, const void *hd) {
   VALUE ary = (VALUE)closure;
   const submsg_handlerdata_t *submsgdata = hd;
-  Descriptor* subdesc = ruby_to_Descriptor(
-      get_def_obj((void*)submsgdata->md));
+  VALUE subdesc =
+      get_def_obj((void*)submsgdata->md);
+  VALUE subklass = Descriptor_msgclass(subdesc);
 
-  VALUE submsg_rb = rb_class_new_instance(0, NULL, subdesc->klass);
+  VALUE submsg_rb = rb_class_new_instance(0, NULL, subklass);
   RepeatedField_push(ary, submsg_rb);
 
   MessageHeader* submsg;
@@ -133,12 +134,13 @@ static void *appendsubmsg_handler(void *closure, const void *hd) {
 static void *submsg_handler(void *closure, const void *hd) {
   MessageHeader* msg = closure;
   const submsg_handlerdata_t* submsgdata = hd;
-  Descriptor* subdesc = ruby_to_Descriptor(
-      get_def_obj((void*)submsgdata->md));
+  VALUE subdesc =
+      get_def_obj((void*)submsgdata->md);
+  VALUE subklass = Descriptor_msgclass(subdesc);
 
   if (DEREF(Message_data(msg), submsgdata->ofs, VALUE) == Qnil) {
     DEREF(Message_data(msg), submsgdata->ofs, VALUE) =
-        rb_class_new_instance(0, NULL, subdesc->klass);
+        rb_class_new_instance(0, NULL, subklass);
   }
 
   VALUE submsg_rb = DEREF(Message_data(msg), submsgdata->ofs, VALUE);
@@ -274,12 +276,13 @@ static const upb_pbdecodermethod *msgdef_decodermethod(Descriptor* desc) {
 VALUE Message_decode(VALUE klass, VALUE data) {
   VALUE descriptor = rb_iv_get(klass, kDescriptorInstanceVar);
   Descriptor* desc = ruby_to_Descriptor(descriptor);
+  VALUE msgklass = Descriptor_msgclass(descriptor);
 
   if (TYPE(data) != T_STRING) {
     rb_raise(rb_eArgError, "Expected string for binary protobuf data.");
   }
 
-  VALUE msg_rb = rb_class_new_instance(0, NULL, desc->klass);
+  VALUE msg_rb = rb_class_new_instance(0, NULL, msgklass);
   MessageHeader* msg;
   TypedData_Get_Struct(msg_rb, MessageHeader, &Message_type, msg);
 
@@ -369,6 +372,11 @@ void stringsink_uninit(stringsink *sink) {
 
 /* msgvisitor *****************************************************************/
 
+// TODO: If/when we support proto2 semantics in addition to the current proto3
+// semantics, which means that we have true field presence, we will want to
+// modify msgvisitor so that it emits all present fields rather than all
+// non-default-value fields.
+
 static void putmsg(VALUE msg, const Descriptor* desc,
                    upb_sink *sink, int depth);
 
@@ -452,7 +460,7 @@ static void putary(VALUE ary, const upb_fielddef *f, upb_sink *sink,
   upb_sink_endseq(sink, getsel(f, UPB_HANDLER_ENDSEQ));
 }
 
-static const int kMaxMessageDepth = 100;
+static const int kMaxMessageDepth = 64;
 
 static void putmsg(VALUE msg_rb, const Descriptor* desc,
                    upb_sink *sink, int depth) {

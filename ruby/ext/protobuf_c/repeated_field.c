@@ -47,7 +47,14 @@ RepeatedField* ruby_to_RepeatedField(VALUE _self) {
   return self;
 }
 
-// Shared methods across all types.
+/*
+ * call-seq:
+ *     RepeatedField.each(&block)
+ *
+ * Invokes the block once for each element of the repeated field. RepeatedField
+ * also includes Enumerable; combined with this method, the repeated field thus
+ * acts like an ordinary Ruby sequence.
+ */
 VALUE RepeatedField_each(VALUE _self) {
   RepeatedField* self = ruby_to_RepeatedField(_self);
   upb_fieldtype_t field_type = self->field_type;
@@ -63,6 +70,13 @@ VALUE RepeatedField_each(VALUE _self) {
   return Qnil;
 }
 
+/*
+ * call-seq:
+ *     RepeatedField.[](index) => value
+ *
+ * Accesses the element at the given index. Throws an exception on out-of-bounds
+ * errors.
+ */
 VALUE RepeatedField_index(VALUE _self, VALUE _index) {
   RepeatedField* self = ruby_to_RepeatedField(_self);
   int element_size = native_slot_size(self->field_type);
@@ -78,6 +92,13 @@ VALUE RepeatedField_index(VALUE _self, VALUE _index) {
   return native_slot_get(field_type, field_type_class, memory);
 }
 
+/*
+ * call-seq:
+ *     RepeatedField.[]=(index, value)
+ *
+ * Sets the element at the given index. Throws an exception on out-of-bounds
+ * errors.
+ */
 VALUE RepeatedField_index_set(VALUE _self, VALUE _index, VALUE val) {
   RepeatedField* self = ruby_to_RepeatedField(_self);
   upb_fieldtype_t field_type = self->field_type;
@@ -115,6 +136,12 @@ void RepeatedField_reserve(RepeatedField* self, int new_size) {
   }
 }
 
+/*
+ * call-seq:
+ *     RepeatedField.push(value)
+ *
+ * Adds a new element to the repeated field.
+ */
 VALUE RepeatedField_push(VALUE _self, VALUE val) {
   RepeatedField* self = ruby_to_RepeatedField(_self);
   upb_fieldtype_t field_type = self->field_type;
@@ -147,6 +174,13 @@ void* RepeatedField_index_native(VALUE _self, int index) {
   return ((uint8_t *)self->elements) + index * element_size;
 }
 
+/*
+ * call-seq:
+ *     RepeatedField.pop => value
+ *
+ * Removes the last element and returns it. Throws an exception if the repeated
+ * field is empty.
+ */
 VALUE RepeatedField_pop(VALUE _self) {
   RepeatedField* self = ruby_to_RepeatedField(_self);
   upb_fieldtype_t field_type = self->field_type;
@@ -162,6 +196,12 @@ VALUE RepeatedField_pop(VALUE _self) {
   return ret;
 }
 
+/*
+ * call-seq:
+ *     RepeatedField.insert(*args)
+ *
+ * Pushes each arg in turn onto the end of the repeated field.
+ */
 VALUE RepeatedField_insert(int argc, VALUE* argv, VALUE _self) {
   for (int i = 0; i < argc; i++) {
     RepeatedField_push(_self, argv[i]);
@@ -169,6 +209,12 @@ VALUE RepeatedField_insert(int argc, VALUE* argv, VALUE _self) {
   return Qnil;
 }
 
+/*
+ * call-seq:
+ *     RepeatedField.replace(list)
+ *
+ * Replaces the contents of the repeated field with the given list of elements.
+ */
 VALUE RepeatedField_replace(VALUE _self, VALUE list) {
   RepeatedField* self = ruby_to_RepeatedField(_self);
   Check_Type(list, T_ARRAY);
@@ -179,12 +225,24 @@ VALUE RepeatedField_replace(VALUE _self, VALUE list) {
   return Qnil;
 }
 
+/*
+ * call-seq:
+ *     RepeatedField.clear
+ *
+ * Clears (removes all elements from) this repeated field.
+ */
 VALUE RepeatedField_clear(VALUE _self) {
   RepeatedField* self = ruby_to_RepeatedField(_self);
   self->size = 0;
   return Qnil;
 }
 
+/*
+ * call-seq:
+ *     RepeatedField.length
+ *
+ * Returns the length of this repeated field.
+ */
 VALUE RepeatedField_length(VALUE _self) {
   RepeatedField* self = ruby_to_RepeatedField(_self);
   return INT2NUM(self->size);
@@ -204,6 +262,14 @@ static VALUE RepeatedField_new_this_type(VALUE _self) {
   return new_rptfield;
 }
 
+/*
+ * call-seq:
+ *     RepeatedField.dup => repeated_field
+ *
+ * Duplicates this repeated field. This performs a deep clone: if the repeated
+ * field elements are messages, each message is also duplicated with its #dup
+ * method.
+ */
 VALUE RepeatedField_dup(VALUE _self) {
   RepeatedField* self = ruby_to_RepeatedField(_self);
   VALUE new_rptfield = RepeatedField_new_this_type(_self);
@@ -240,6 +306,15 @@ VALUE RepeatedField_shallow_dup(VALUE _self) {
   return new_rptfield;
 }
 
+/*
+ * call-seq:
+ *     RepeatedField.==(other) => boolean
+ *
+ * Compares this repeated field to another. Repeated fields are equal if their
+ * element types are equal, their lengths are equal, and each element is equal.
+ * Elements are compared as per normal Ruby semantics, by calling their :==
+ * methods (or performing a more efficient comparison for primitive types).
+ */
 VALUE RepeatedField_eq(VALUE _self, VALUE _other) {
   if (_self == _other) {
     return Qtrue;
@@ -277,6 +352,12 @@ VALUE RepeatedField_eq(VALUE _self, VALUE _other) {
   return Qtrue;
 }
 
+/*
+ * call-seq:
+ *     RepeatedField.hash => hash_value
+ *
+ * Returns a hash value computed from this repeated field's elements.
+ */
 VALUE RepeatedField_hash(VALUE _self) {
   RepeatedField* self = ruby_to_RepeatedField(_self);
 
@@ -297,6 +378,14 @@ VALUE RepeatedField_hash(VALUE _self) {
   return hash;
 }
 
+/*
+ * call-seq:
+ *     RepeatedField.inspect => string
+ *
+ * Returns a string representing this repeated field's elements. It will be
+ * formated as "[<element>, <element>, ...]", with each element's string
+ * representation computed by its own #inspect method.
+ */
 VALUE RepeatedField_inspect(VALUE _self) {
   RepeatedField* self = ruby_to_RepeatedField(_self);
 
@@ -323,6 +412,14 @@ VALUE RepeatedField_inspect(VALUE _self) {
   return str;
 }
 
+/*
+ * call-seq:
+ *     RepeatedField.+(other) => repeated field
+ *
+ * Returns a new repeated field that contains the concatenated list of this
+ * repeated field's elements and other's elements. The other (second) list may
+ * be either another repeated field or a Ruby array.
+ */
 VALUE RepeatedField_plus(VALUE _self, VALUE list) {
   VALUE dupped = RepeatedField_shallow_dup(_self);
 
@@ -433,6 +530,17 @@ void RepeatedField_free(void* _self) {
   xfree(self);
 }
 
+/*
+ * call-seq:
+ *     RepeatedField.new(type, type_class = nil, initial_elems = [])
+ *
+ * Creates a new repeated field. The provided type must be a Ruby symbol, and
+ * can take on the same values as those accepted by FieldDescriptor#type=. If
+ * the type is :message or :enum, type_class must be non-nil, and must be the
+ * Ruby class or module returned by Descriptor#msgclass or
+ * EnumDescriptor#enummodule, respectively. An initial list of elements may also
+ * be provided.
+ */
 VALUE RepeatedField_alloc(VALUE klass) {
   RepeatedField* self = ALLOC(RepeatedField);
   self->elements = NULL;

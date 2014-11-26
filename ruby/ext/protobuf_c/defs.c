@@ -48,12 +48,25 @@ static VALUE rb_str_maybe_null(const char* s) {
   return rb_str_new2(s);
 }
 
-static void check_notfrozen(const upb_def* def) {
+static upb_def* check_notfrozen(const upb_def* def) {
   if (upb_def_isfrozen(def)) {
     rb_raise(rb_eRuntimeError,
              "Attempt to modify a frozen descriptor. Once descriptors are "
              "added to the descriptor pool, they may not be modified.");
   }
+  return (upb_def*)def;
+}
+
+static upb_msgdef* check_msg_notfrozen(const upb_msgdef* def) {
+  return (upb_msgdef*)check_notfrozen((const upb_def*)def);
+}
+
+static upb_fielddef* check_field_notfrozen(const upb_fielddef* def) {
+  return (upb_fielddef*)check_notfrozen((const upb_def*)def);
+}
+
+static upb_enumdef* check_enum_notfrozen(const upb_enumdef* def) {
+  return (upb_enumdef*)check_notfrozen((const upb_def*)def);
 }
 
 // -----------------------------------------------------------------------------
@@ -90,6 +103,12 @@ void DescriptorPool_free(void* _self) {
   xfree(self);
 }
 
+/*
+ * call-seq:
+ *     DescriptorPool.alloc => pool
+ *
+ * Creates a new, empty, descriptor pool.
+ */
 VALUE DescriptorPool_alloc(VALUE klass) {
   DescriptorPool* self = ALLOC(DescriptorPool);
   self->symtab = upb_symtab_new(&self->symtab);
@@ -112,17 +131,20 @@ void DescriptorPool_register(VALUE module) {
   rb_gc_register_address(&global_pool);
 }
 
-static void add_descriptor_to_pool(DescriptorPool* self, Descriptor* descriptor) {
-  upb_status s = UPB_STATUS_INIT;
-  upb_symtab_add(self->symtab, (upb_def**)&descriptor->msgdef, 1, NULL, &s);
-  check_upb_status(&s, "Adding Descriptor to DescriptorPool failed");
+static void add_descriptor_to_pool(DescriptorPool* self,
+                                   Descriptor* descriptor) {
+  CHECK_UPB(
+      upb_symtab_add(self->symtab, (upb_def**)&descriptor->msgdef, 1,
+                     NULL, &status),
+      "Adding Descriptor to DescriptorPool failed");
 }
 
 static void add_enumdesc_to_pool(DescriptorPool* self,
                                  EnumDescriptor* enumdesc) {
-  upb_status s = UPB_STATUS_INIT;
-  upb_symtab_add(self->symtab, (upb_def**)&enumdesc->enumdef, 1, NULL, &s);
-  check_upb_status(&s, "Adding EnumDescriptor to DescriptorPool failed");
+  CHECK_UPB(
+      upb_symtab_add(self->symtab, (upb_def**)&enumdesc->enumdef, 1,
+                     NULL, &status),
+      "Adding EnumDescriptor to DescriptorPool failed");
 }
 
 static void create_ruby_class_or_module(VALUE def) {
@@ -140,9 +162,16 @@ static void create_ruby_class_or_module(VALUE def) {
   }
 }
 
+/*
+ * call-seq:
+ *     DescriptorPool.add(descriptor)
+ *
+ * Adds the given Descriptor or EnumDescriptor to this pool. All references to
+ * other types in a Descriptor's fields must be resolvable within this pool or
+ * an exception will be raised.
+ */
 VALUE DescriptorPool_add(VALUE _self, VALUE def) {
   DEFINE_SELF(DescriptorPool, self, _self);
-  create_ruby_class_or_module(def);
   VALUE def_klass = rb_obj_class(def);
   if (def_klass == cDescriptor) {
     add_descriptor_to_pool(self, ruby_to_Descriptor(def));
@@ -155,6 +184,16 @@ VALUE DescriptorPool_add(VALUE _self, VALUE def) {
   return Qnil;
 }
 
+/*
+ * call-seq:
+ *     DescriptorPool.build(&block)
+ *
+ * Invokes the block with a Builder instance as self. All message and enum types
+ * added within the block are committed to the pool atomically, and may refer
+ * (co)recursively to each other. The user should call Builder#add_message and
+ * Builder#add_enum within the block as appropriate.  This is the recommended,
+ * idiomatic way to define new message and enum types.
+ */
 VALUE DescriptorPool_build(VALUE _self) {
   VALUE ctx = rb_class_new_instance(0, NULL, cBuilder);
   VALUE block = rb_block_proc();
@@ -163,6 +202,13 @@ VALUE DescriptorPool_build(VALUE _self) {
   return Qnil;
 }
 
+/*
+ * call-seq:
+ *     DescriptorPool.lookup(name) => descriptor
+ *
+ * Finds a Descriptor or EnumDescriptor by name and returns it, or nil if none
+ * exists with the given name.
+ */
 VALUE DescriptorPool_lookup(VALUE _self, VALUE name) {
   DEFINE_SELF(DescriptorPool, self, _self);
   const char* name_str = get_str(name);
@@ -173,6 +219,15 @@ VALUE DescriptorPool_lookup(VALUE _self, VALUE name) {
   return get_def_obj(def);
 }
 
+/*
+ * call-seq:
+ *     DescriptorPool.global_pool => descriptor_pool
+ *
+ * Class method that returns the global DescriptorPool. This is a singleton into
+ * which generated-code message and enum types are registered. The user may also
+ * register types in this pool for convenience so that they do not have to hold
+ * a reference to a private pool instance.
+ */
 VALUE DescriptorPool_global_pool(VALUE _self) {
   return global_pool;
 }
@@ -186,7 +241,6 @@ DEFINE_CLASS(Descriptor, "Google::Protobuf::Descriptor");
 void Descriptor_mark(void* _self) {
   Descriptor* self = _self;
   rb_gc_mark(self->klass);
-  rb_gc_mark(self->fields);
 }
 
 void Descriptor_free(void* _self) {
@@ -204,12 +258,20 @@ void Descriptor_free(void* _self) {
   xfree(self);
 }
 
+/*
+ * call-seq:
+ *     Descriptor.new => descriptor
+ *
+ * Creates a new, empty, message type descriptor. At a minimum, its name must be
+ * set before it is added to a pool. It cannot be used to create messages until
+ * it is added to a pool, after which it becomes immutable (as part of a
+ * finalization process).
+ */
 VALUE Descriptor_alloc(VALUE klass) {
   Descriptor* self = ALLOC(Descriptor);
   VALUE ret = TypedData_Wrap_Struct(klass, &_Descriptor_type, self);
   self->msgdef = upb_msgdef_new(&self->msgdef);
   self->klass = Qnil;
-  self->fields = rb_ary_new();
   self->layout = NULL;
   self->fill_method = NULL;
   self->serialize_handlers = NULL;
@@ -220,36 +282,73 @@ void Descriptor_register(VALUE module) {
   VALUE klass = rb_define_class_under(
       module, "Descriptor", rb_cObject);
   rb_define_alloc_func(klass, Descriptor_alloc);
-  rb_define_method(klass, "fields", Descriptor_fields, 0);
+  rb_define_method(klass, "each", Descriptor_each, 0);
   rb_define_method(klass, "lookup", Descriptor_lookup, 1);
   rb_define_method(klass, "add_field", Descriptor_add_field, 1);
   rb_define_method(klass, "msgclass", Descriptor_msgclass, 0);
   rb_define_method(klass, "name", Descriptor_name, 0);
   rb_define_method(klass, "name=", Descriptor_name_set, 1);
+  rb_include_module(klass, rb_mEnumerable);
   cDescriptor = klass;
   rb_gc_register_address(&cDescriptor);
 }
 
+/*
+ * call-seq:
+ *     Descriptor.name => name
+ *
+ * Returns the name of this message type as a fully-qualfied string (e.g.,
+ * My.Package.MessageType).
+ */
 VALUE Descriptor_name(VALUE _self) {
   DEFINE_SELF(Descriptor, self, _self);
   return rb_str_maybe_null(upb_msgdef_fullname(self->msgdef));
 }
 
+/*
+ * call-seq:
+ *    Descriptor.name = name
+ *
+ * Assigns a name to this message type. The descriptor must not have been added
+ * to a pool yet.
+ */
 VALUE Descriptor_name_set(VALUE _self, VALUE str) {
   DEFINE_SELF(Descriptor, self, _self);
-  check_notfrozen((const upb_def*)self->msgdef);
+  upb_msgdef* mut_def = check_msg_notfrozen(self->msgdef);
   const char* name = get_str(str);
-  upb_status s = UPB_STATUS_INIT;
-  upb_msgdef_setfullname(self->msgdef, name, &s);
-  check_upb_status(&s, "Error setting Descriptor name");
+  CHECK_UPB(
+      upb_msgdef_setfullname(mut_def, name, &status),
+      "Error setting Descriptor name");
   return Qnil;
 }
 
-VALUE Descriptor_fields(VALUE _self) {
+/*
+ * call-seq:
+ *     Descriptor.each(&block)
+ *
+ * Iterates over fields in this message type, yielding to the block on each one.
+ */
+VALUE Descriptor_each(VALUE _self) {
   DEFINE_SELF(Descriptor, self, _self);
-  return self->fields;
+
+  upb_msg_iter it;
+  for (upb_msg_begin(&it, self->msgdef);
+       !upb_msg_done(&it);
+       upb_msg_next(&it)) {
+    const upb_fielddef* field = upb_msg_iter_field(&it);
+    VALUE obj = get_def_obj(field);
+    rb_yield(obj);
+  }
+  return Qnil;
 }
 
+/*
+ * call-seq:
+ *     Descriptor.lookup(name) => FieldDescriptor
+ *
+ * Returns the field descriptor for the field with the given name, if present,
+ * or nil if none.
+ */
 VALUE Descriptor_lookup(VALUE _self, VALUE name) {
   DEFINE_SELF(Descriptor, self, _self);
   const char* s = get_str(name);
@@ -260,20 +359,43 @@ VALUE Descriptor_lookup(VALUE _self, VALUE name) {
   return get_def_obj(field);
 }
 
+/*
+ * call-seq:
+ *     Descriptor.add_field(field) => nil
+ *
+ * Adds the given FieldDescriptor to this message type. The descriptor must not
+ * have been added to a pool yet. Raises an exception if a field with the same
+ * name or number already exists. Sub-type references (e.g. for fields of type
+ * message) are not resolved at this point.
+ */
 VALUE Descriptor_add_field(VALUE _self, VALUE obj) {
   DEFINE_SELF(Descriptor, self, _self);
-  check_notfrozen((const upb_def*)self->msgdef);
+  upb_msgdef* mut_def = check_msg_notfrozen(self->msgdef);
   FieldDescriptor* def = ruby_to_FieldDescriptor(obj);
-  upb_status s = UPB_STATUS_INIT;
-  upb_msgdef_addfield(self->msgdef, def->fielddef, NULL, &s);
-  check_upb_status(&s, "Adding field to Descriptor failed");
-  rb_ary_push(self->fields, obj);
+  upb_fielddef* mut_field_def = check_field_notfrozen(def->fielddef);
+  CHECK_UPB(
+      upb_msgdef_addfield(mut_def, mut_field_def, NULL, &status),
+      "Adding field to Descriptor failed");
   add_def_obj(def->fielddef, obj);
   return Qnil;
 }
 
+/*
+ * call-seq:
+ *     Descriptor.msgclass => message_klass
+ *
+ * Returns the Ruby class created for this message type. Valid only once the
+ * message type has been added to a pool.
+ */
 VALUE Descriptor_msgclass(VALUE _self) {
   DEFINE_SELF(Descriptor, self, _self);
+  if (!upb_def_isfrozen((const upb_def*)self->msgdef)) {
+    rb_raise(rb_eRuntimeError,
+             "Cannot fetch message class from a Descriptor not yet in a pool.");
+  }
+  if (self->klass == Qnil) {
+    create_ruby_class_or_module(_self);
+  }
   return self->klass;
 }
 
@@ -292,11 +414,19 @@ void FieldDescriptor_free(void* _self) {
   xfree(self);
 }
 
+/*
+ * call-seq:
+ *     FieldDescriptor.new => field
+ *
+ * Returns a new field descriptor. Its name, type, etc. must be set before it is
+ * added to a message type.
+ */
 VALUE FieldDescriptor_alloc(VALUE klass) {
   FieldDescriptor* self = ALLOC(FieldDescriptor);
   VALUE ret = TypedData_Wrap_Struct(klass, &_FieldDescriptor_type, self);
-  self->fielddef = upb_fielddef_new(&self->fielddef);
-  upb_fielddef_setpacked(self->fielddef, false);
+  upb_fielddef* fielddef = upb_fielddef_new(&self->fielddef);
+  upb_fielddef_setpacked(fielddef, false);
+  self->fielddef = fielddef;
   return ret;
 }
 
@@ -321,18 +451,30 @@ void FieldDescriptor_register(VALUE module) {
   rb_gc_register_address(&cFieldDescriptor);
 }
 
+/*
+ * call-seq:
+ *     FieldDescriptor.name => name
+ *
+ * Returns the name of this field.
+ */
 VALUE FieldDescriptor_name(VALUE _self) {
   DEFINE_SELF(FieldDescriptor, self, _self);
   return rb_str_maybe_null(upb_fielddef_name(self->fielddef));
 }
 
+/*
+ * call-seq:
+ *     FieldDescriptor.name = name
+ *
+ * Sets the name of this field. Cannot be called once the containing message
+ * type, if any, is added to a pool.
+ */
 VALUE FieldDescriptor_name_set(VALUE _self, VALUE str) {
   DEFINE_SELF(FieldDescriptor, self, _self);
-  check_notfrozen((const upb_def*)self->fielddef);
+  upb_fielddef* mut_def = check_field_notfrozen(self->fielddef);
   const char* name = get_str(str);
-  upb_status s = UPB_STATUS_INIT;
-  upb_fielddef_setname(self->fielddef, name, &s);
-  check_upb_status(&s, "Error setting FieldDescriptor name");
+  CHECK_UPB(upb_fielddef_setname(mut_def, name, &status),
+            "Error setting FieldDescriptor name");
   return Qnil;
 }
 
@@ -389,6 +531,16 @@ VALUE fieldtype_to_ruby(upb_fieldtype_t type) {
   return Qnil;
 }
 
+/*
+ * call-seq:
+ *     FieldDescriptor.type => type
+ *
+ * Returns this field's type, as a Ruby symbol, or nil if not yet set.
+ *
+ * Valid field types are:
+ *     :int32, :int64, :uint32, :uint64, :float, :double, :bool, :string,
+ *     :bytes, :message.
+ */
 VALUE FieldDescriptor_type(VALUE _self) {
   DEFINE_SELF(FieldDescriptor, self, _self);
   if (!upb_fielddef_typeisset(self->fielddef)) {
@@ -397,13 +549,29 @@ VALUE FieldDescriptor_type(VALUE _self) {
   return fieldtype_to_ruby(upb_fielddef_type(self->fielddef));
 }
 
+/*
+ * call-seq:
+ *     FieldDescriptor.type = type
+ *
+ * Sets this field's type. Cannot be called if field is part of a message type
+ * already in a pool.
+ */
 VALUE FieldDescriptor_type_set(VALUE _self, VALUE type) {
   DEFINE_SELF(FieldDescriptor, self, _self);
-  check_notfrozen((const upb_def*)self->fielddef);
-  upb_fielddef_settype(self->fielddef, ruby_to_fieldtype(type));
+  upb_fielddef* mut_def = check_field_notfrozen(self->fielddef);
+  upb_fielddef_settype(mut_def, ruby_to_fieldtype(type));
   return Qnil;
 }
 
+/*
+ * call-seq:
+ *     FieldDescriptor.label => label
+ *
+ * Returns this field's label (i.e., plurality), as a Ruby symbol.
+ *
+ * Valid field labels are:
+ *     :optional, :repeated
+ */
 VALUE FieldDescriptor_label(VALUE _self) {
   DEFINE_SELF(FieldDescriptor, self, _self);
   switch (upb_fielddef_label(self->fielddef)) {
@@ -420,9 +588,16 @@ VALUE FieldDescriptor_label(VALUE _self) {
   return Qnil;
 }
 
+/*
+ * call-seq:
+ *     FieldDescriptor.label = label
+ *
+ * Sets the label on this field. Cannot be called if field is part of a message
+ * type already in a pool.
+ */
 VALUE FieldDescriptor_label_set(VALUE _self, VALUE label) {
   DEFINE_SELF(FieldDescriptor, self, _self);
-  check_notfrozen((const upb_def*)self->fielddef);
+  upb_fielddef* mut_def = check_field_notfrozen(self->fielddef);
   if (TYPE(label) != T_SYMBOL) {
     rb_raise(rb_eArgError, "Expected symbol for field label.");
   }
@@ -444,25 +619,46 @@ VALUE FieldDescriptor_label_set(VALUE _self, VALUE label) {
     rb_raise(rb_eArgError, "Unknown field label.");
   }
 
-  upb_fielddef_setlabel(self->fielddef, upb_label);
+  upb_fielddef_setlabel(mut_def, upb_label);
 
   return Qnil;
 }
 
+/*
+ * call-seq:
+ *     FieldDescriptor.number => number
+ *
+ * Returns the tag number for this field.
+ */
 VALUE FieldDescriptor_number(VALUE _self) {
   DEFINE_SELF(FieldDescriptor, self, _self);
   return INT2NUM(upb_fielddef_number(self->fielddef));
 }
 
+/*
+ * call-seq:
+ *     FieldDescriptor.number = number
+ *
+ * Sets the tag number for this field. Cannot be called if field is part of a
+ * message type already in a pool.
+ */
 VALUE FieldDescriptor_number_set(VALUE _self, VALUE number) {
   DEFINE_SELF(FieldDescriptor, self, _self);
-  check_notfrozen((const upb_def*)self->fielddef);
-  upb_status s = UPB_STATUS_INIT;
-  upb_fielddef_setnumber(self->fielddef, NUM2INT(number), &s);
-  check_upb_status(&s, "Error setting field number");
+  upb_fielddef* mut_def = check_field_notfrozen(self->fielddef);
+  CHECK_UPB(upb_fielddef_setnumber(mut_def, NUM2INT(number), &status),
+            "Error setting field number");
   return Qnil;
 }
 
+/*
+ * call-seq:
+ *     FieldDescriptor.submsg_name => submsg_name
+ *
+ * Returns the name of the message or enum type corresponding to this field, if
+ * it is a message or enum field (respectively), or nil otherwise. This type
+ * name will be resolved within the context of the pool to which the containing
+ * message type is added.
+ */
 VALUE FieldDescriptor_submsg_name(VALUE _self) {
   DEFINE_SELF(FieldDescriptor, self, _self);
   if (!upb_fielddef_hassubdef(self->fielddef)) {
@@ -471,19 +667,37 @@ VALUE FieldDescriptor_submsg_name(VALUE _self) {
   return rb_str_maybe_null(upb_fielddef_subdefname(self->fielddef));
 }
 
+/*
+ * call-seq:
+ *     FieldDescriptor.submsg_name = submsg_name
+ *
+ * Sets the name of the message or enum type corresponding to this field, if it
+ * is a message or enum field (respectively). This type name will be resolved
+ * within the context of the pool to which the containing message type is added.
+ * Cannot be called on field that are not of message or enum type, or on fields
+ * that are part of a message type already added to a pool.
+ */
 VALUE FieldDescriptor_submsg_name_set(VALUE _self, VALUE value) {
   DEFINE_SELF(FieldDescriptor, self, _self);
-  check_notfrozen((const upb_def*)self->fielddef);
+  upb_fielddef* mut_def = check_field_notfrozen(self->fielddef);
   if (!upb_fielddef_hassubdef(self->fielddef)) {
     rb_raise(rb_eTypeError, "FieldDescriptor does not have subdef.");
   }
   const char* str = get_str(value);
-  upb_status s = UPB_STATUS_INIT;
-  upb_fielddef_setsubdefname(self->fielddef, str, &s);
-  check_upb_status(&s, "Error setting submessage name");
+  CHECK_UPB(upb_fielddef_setsubdefname(mut_def, str, &status),
+            "Error setting submessage name");
   return Qnil;
 }
 
+/*
+ * call-seq:
+ *     FieldDescriptor.subtype => message_or_enum_descriptor
+ *
+ * Returns the message or enum descriptor corresponding to this field's type if
+ * it is a message or enum field, respectively, or nil otherwise. Cannot be
+ * called *until* the containing message type is added to a pool (and thus
+ * resolved).
+ */
 VALUE FieldDescriptor_subtype(VALUE _self) {
   DEFINE_SELF(FieldDescriptor, self, _self);
   if (!upb_fielddef_hassubdef(self->fielddef)) {
@@ -496,6 +710,13 @@ VALUE FieldDescriptor_subtype(VALUE _self) {
   return get_def_obj(def);
 }
 
+/*
+ * call-seq:
+ *     FieldDescriptor.get(message) => value
+ *
+ * Returns the value set for this field on the given message. Raises an
+ * exception if message is of the wrong type.
+ */
 VALUE FieldDescriptor_get(VALUE _self, VALUE msg_rb) {
   DEFINE_SELF(FieldDescriptor, self, _self);
   MessageHeader* msg;
@@ -506,6 +727,14 @@ VALUE FieldDescriptor_get(VALUE _self, VALUE msg_rb) {
   return layout_get(msg->descriptor->layout, Message_data(msg), self->fielddef);
 }
 
+/*
+ * call-seq:
+ *     FieldDescriptor.set(message, value)
+ *
+ * Sets the value corresponding to this field to the given value on the given
+ * message. Raises an exception if message is of the wrong type. Performs the
+ * ordinary type-checks for field setting.
+ */
 VALUE FieldDescriptor_set(VALUE _self, VALUE msg_rb, VALUE value) {
   DEFINE_SELF(FieldDescriptor, self, _self);
   MessageHeader* msg;
@@ -534,6 +763,14 @@ void EnumDescriptor_free(void* _self) {
   xfree(self);
 }
 
+/*
+ * call-seq:
+ *     EnumDescriptor.new => enum_descriptor
+ *
+ * Creates a new, empty, enum descriptor. Must be added to a pool before the
+ * enum type can be used. The enum type may only be modified prior to adding to
+ * a pool.
+ */
 VALUE EnumDescriptor_alloc(VALUE klass) {
   EnumDescriptor* self = ALLOC(EnumDescriptor);
   VALUE ret = TypedData_Wrap_Struct(klass, &_EnumDescriptor_type, self);
@@ -557,32 +794,58 @@ void EnumDescriptor_register(VALUE module) {
   rb_gc_register_address(&cEnumDescriptor);
 }
 
+/*
+ * call-seq:
+ *     EnumDescriptor.name => name
+ *
+ * Returns the name of this enum type.
+ */
 VALUE EnumDescriptor_name(VALUE _self) {
   DEFINE_SELF(EnumDescriptor, self, _self);
   return rb_str_maybe_null(upb_enumdef_fullname(self->enumdef));
 }
 
+/*
+ * call-seq:
+ *     EnumDescriptor.name = name
+ *
+ * Sets the name of this enum type. Cannot be called if the enum type has
+ * already been added to a pool.
+ */
 VALUE EnumDescriptor_name_set(VALUE _self, VALUE str) {
   DEFINE_SELF(EnumDescriptor, self, _self);
-  check_notfrozen((const upb_def*)self->enumdef);
+  upb_enumdef* mut_def = check_enum_notfrozen(self->enumdef);
   const char* name = get_str(str);
-  upb_status s = UPB_STATUS_INIT;
-  upb_enumdef_setfullname(self->enumdef, name, &s);
-  check_upb_status(&s, "Error setting EnumDescriptor name");
+  CHECK_UPB(upb_enumdef_setfullname(mut_def, name, &status),
+            "Error setting EnumDescriptor name");
   return Qnil;
 }
 
+/*
+ * call-seq:
+ *     EnumDescriptor.add_value(key, value)
+ *
+ * Adds a new key => value mapping to this enum type. Key must be given as a
+ * Ruby symbol. Cannot be called if the enum type has already been added to a
+ * pool. Will raise an exception if the key or value is already in use.
+ */
 VALUE EnumDescriptor_add_value(VALUE _self, VALUE name, VALUE number) {
   DEFINE_SELF(EnumDescriptor, self, _self);
-  check_notfrozen((const upb_def*)self->enumdef);
+  upb_enumdef* mut_def = check_enum_notfrozen(self->enumdef);
   const char* name_str = rb_id2name(SYM2ID(name));
   int32_t val = NUM2INT(number);
-  upb_status s = UPB_STATUS_INIT;
-  upb_enumdef_addval(self->enumdef, name_str, val, &s);
-  check_upb_status(&s, "Error adding value to enum");
+  CHECK_UPB(upb_enumdef_addval(mut_def, name_str, val, &status),
+            "Error adding value to enum");
   return Qnil;
 }
 
+/*
+ * call-seq:
+ *     EnumDescriptor.lookup_name(name) => value
+ *
+ * Returns the numeric value corresponding to the given key name (as a Ruby
+ * symbol), or nil if none.
+ */
 VALUE EnumDescriptor_lookup_name(VALUE _self, VALUE name) {
   DEFINE_SELF(EnumDescriptor, self, _self);
   const char* name_str= rb_id2name(SYM2ID(name));
@@ -594,6 +857,13 @@ VALUE EnumDescriptor_lookup_name(VALUE _self, VALUE name) {
   }
 }
 
+/*
+ * call-seq:
+ *     EnumDescriptor.lookup_value(name) => value
+ *
+ * Returns the key name (as a Ruby symbol) corresponding to the integer value,
+ * or nil if none.
+ */
 VALUE EnumDescriptor_lookup_value(VALUE _self, VALUE number) {
   DEFINE_SELF(EnumDescriptor, self, _self);
   int32_t val = NUM2INT(number);
@@ -605,6 +875,13 @@ VALUE EnumDescriptor_lookup_value(VALUE _self, VALUE number) {
   }
 }
 
+/*
+ * call-seq:
+ *     EnumDescriptor.values => value_map
+ *
+ * Returns a hashmap of key => value mappings corresponding to this enum's
+ * definition. Keys are returned as Ruby symbols.
+ */
 VALUE EnumDescriptor_values(VALUE _self) {
   DEFINE_SELF(EnumDescriptor, self, _self);
   VALUE ret = rb_hash_new();
@@ -621,8 +898,23 @@ VALUE EnumDescriptor_values(VALUE _self) {
   return ret;
 }
 
+/*
+ * call-seq:
+ *     EnumDescriptor.enummodule => module
+ *
+ * Returns the Ruby module corresponding to this enum type. Cannot be called
+ * until the enum descriptor has been added to a pool.
+ */
 VALUE EnumDescriptor_enummodule(VALUE _self) {
   DEFINE_SELF(EnumDescriptor, self, _self);
+  if (!upb_def_isfrozen((const upb_def*)self->enumdef)) {
+    rb_raise(rb_eRuntimeError,
+             "Cannot fetch enum module from an EnumDescriptor not yet "
+             "in a pool.");
+  }
+  if (self->module == Qnil) {
+    create_ruby_class_or_module(_self);
+  }
   return self->module;
 }
 
@@ -664,6 +956,13 @@ void MessageBuilderContext_register(VALUE module) {
   rb_gc_register_address(&cMessageBuilderContext);
 }
 
+/*
+ * call-seq:
+ *     MessageBuilderContext.new(desc) => context
+ *
+ * Create a new builder context around the given message descriptor. This class
+ * is intended to serve as a DSL context to be used with #instance_eval.
+ */
 VALUE MessageBuilderContext_initialize(VALUE _self, VALUE msgdef) {
   DEFINE_SELF(MessageBuilderContext, self, _self);
   self->descriptor = msgdef;
@@ -695,6 +994,15 @@ static VALUE msgdef_add_field(VALUE msgdef,
   return fielddef;
 }
 
+/*
+ * call-seq:
+ *     MessageBuilderContext.optional(name, type, number, type_class = nil)
+ *
+ * Defines a new optional field on this message type with the given type, tag
+ * number, and type class (for message and enum fields). The type must be a Ruby
+ * symbol (as accepted by FieldDescriptor#type=) and the type_class must be a
+ * string, if present (as accepted by FieldDescriptor#submsg_name=).
+ */
 VALUE MessageBuilderContext_optional(int argc, VALUE* argv, VALUE _self) {
   DEFINE_SELF(MessageBuilderContext, self, _self);
 
@@ -710,6 +1018,19 @@ VALUE MessageBuilderContext_optional(int argc, VALUE* argv, VALUE _self) {
                           name, type, number, type_class);
 }
 
+/*
+ * call-seq:
+ *     MessageBuilderContext.required(name, type, number, type_class = nil)
+ *
+ * Defines a new required field on this message type with the given type, tag
+ * number, and type class (for message and enum fields). The type must be a Ruby
+ * symbol (as accepted by FieldDescriptor#type=) and the type_class must be a
+ * string, if present (as accepted by FieldDescriptor#submsg_name=).
+ *
+ * Proto3 does not have required fields, but this method exists for
+ * completeness. Any attempt to add a message type with required fields to a
+ * pool will currently result in an error.
+ */
 VALUE MessageBuilderContext_required(int argc, VALUE* argv, VALUE _self) {
   DEFINE_SELF(MessageBuilderContext, self, _self);
 
@@ -725,6 +1046,15 @@ VALUE MessageBuilderContext_required(int argc, VALUE* argv, VALUE _self) {
                           name, type, number, type_class);
 }
 
+/*
+ * call-seq:
+ *     MessageBuilderContext.repeated(name, type, number, type_class = nil)
+ *
+ * Defines a new repeated field on this message type with the given type, tag
+ * number, and type class (for message and enum fields). The type must be a Ruby
+ * symbol (as accepted by FieldDescriptor#type=) and the type_class must be a
+ * string, if present (as accepted by FieldDescriptor#submsg_name=).
+ */
 VALUE MessageBuilderContext_repeated(int argc, VALUE* argv, VALUE _self) {
   DEFINE_SELF(MessageBuilderContext, self, _self);
 
@@ -776,6 +1106,13 @@ void EnumBuilderContext_register(VALUE module) {
   rb_gc_register_address(&cEnumBuilderContext);
 }
 
+/*
+ * call-seq:
+ *     EnumBuilderContext.new(enumdesc) => context
+ *
+ * Create a new builder context around the given enum descriptor. This class is
+ * intended to serve as a DSL context to be used with #instance_eval.
+ */
 VALUE EnumBuilderContext_initialize(VALUE _self, VALUE enumdef) {
   DEFINE_SELF(EnumBuilderContext, self, _self);
   self->enumdesc = enumdef;
@@ -788,6 +1125,13 @@ static VALUE enumdef_add_value(VALUE enumdef,
   return Qnil;
 }
 
+/*
+ * call-seq:
+ *     EnumBuilder.add_value(name, number)
+ *
+ * Adds the given name => number mapping to the enum type. Name must be a Ruby
+ * symbol.
+ */
 VALUE EnumBuilderContext_value(VALUE _self, VALUE name, VALUE number) {
   DEFINE_SELF(EnumBuilderContext, self, _self);
   return enumdef_add_value(self->enumdesc, name, number);
@@ -810,6 +1154,14 @@ void Builder_free(void* _self) {
   xfree(self);
 }
 
+/*
+ * call-seq:
+ *     Builder.new => builder
+ *
+ * Creates a new Builder. A Builder can accumulate a set of new message and enum
+ * descriptors and atomically register them into a pool in a way that allows for
+ * (co)recursive type references.
+ */
 VALUE Builder_alloc(VALUE klass) {
   Builder* self = ALLOC(Builder);
   VALUE ret = TypedData_Wrap_Struct(
@@ -829,6 +1181,17 @@ void Builder_register(VALUE module) {
   rb_gc_register_address(&cBuilder);
 }
 
+/*
+ * call-seq:
+ *     Builder.add_message(name, &block)
+ *
+ * Creates a new, empty descriptor with the given name, and invokes the block in
+ * the context of a MessageBuilderContext on that descriptor. The block can then
+ * call, e.g., MessageBuilderContext#optional and MessageBuilderContext#repeated
+ * methods to define the message fields.
+ *
+ * This is the recommended, idiomatic way to build message definitions.
+ */
 VALUE Builder_add_message(VALUE _self, VALUE name) {
   DEFINE_SELF(Builder, self, _self);
   VALUE msgdef = rb_class_new_instance(0, NULL, cDescriptor);
@@ -840,6 +1203,16 @@ VALUE Builder_add_message(VALUE _self, VALUE name) {
   return Qnil;
 }
 
+/*
+ * call-seq:
+ *     Builder.add_enum(name, &block)
+ *
+ * Creates a new, empty enum descriptor with the given name, and invokes the block in
+ * the context of an EnumBuilderContext on that descriptor. The block can then
+ * call EnumBuilderContext#add_value to define the enum values.
+ *
+ * This is the recommended, idiomatic way to build enum definitions.
+ */
 VALUE Builder_add_enum(VALUE _self, VALUE name) {
   DEFINE_SELF(Builder, self, _self);
   VALUE enumdef = rb_class_new_instance(0, NULL, cEnumDescriptor);
@@ -872,6 +1245,20 @@ static void validate_enumdef(const upb_enumdef* enumdef) {
   }
 }
 
+/*
+ * call-seq:
+ *     Builder.finalize_to_pool(pool)
+ *
+ * Adds all accumulated message and enum descriptors created in this builder
+ * context to the given pool. The operation occurs atomically, and all
+ * descriptors can refer to each other (including in cycles). This is the only
+ * way to build (co)recursive message definitions.
+ *
+ * This method is usually called automatically by DescriptorPool#build after it
+ * invokes the given user block in the context of the builder. The user should
+ * not normally need to call this manually because a Builder is not normally
+ * created manually.
+ */
 VALUE Builder_finalize_to_pool(VALUE _self, VALUE pool_rb) {
   DEFINE_SELF(Builder, self, _self);
 
@@ -890,22 +1277,13 @@ VALUE Builder_finalize_to_pool(VALUE _self, VALUE pool_rb) {
     }
   }
 
-  upb_status s = UPB_STATUS_INIT;
-  upb_symtab_add(pool->symtab, (upb_def**)self->defs,
-                 RARRAY_LEN(self->pending_list), NULL, &s);
-  check_upb_status(&s, "Unable to add defs to DescriptorPool");
+  CHECK_UPB(upb_symtab_add(pool->symtab, (upb_def**)self->defs,
+                           RARRAY_LEN(self->pending_list), NULL, &status),
+            "Unable to add defs to DescriptorPool");
 
   for (int i = 0; i < RARRAY_LEN(self->pending_list); i++) {
     VALUE def_rb = rb_ary_entry(self->pending_list, i);
     add_def_obj(self->defs[i], def_rb);
-  }
-
-  // Do this in a second pass so that if parser creation requires lookup of
-  // other defs in this batch, they will already have been placed in the def_obj
-  // map.
-  for (int i = 0; i < RARRAY_LEN(self->pending_list); i++) {
-    VALUE def_rb = rb_ary_entry(self->pending_list, i);
-    create_ruby_class_or_module(def_rb);
   }
 
   self->pending_list = rb_ary_new();

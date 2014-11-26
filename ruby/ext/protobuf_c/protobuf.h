@@ -63,6 +63,42 @@ typedef struct MessageBuilderContext MessageBuilderContext;
 typedef struct EnumBuilderContext EnumBuilderContext;
 typedef struct Builder Builder;
 
+/*
+ It can be a big confusing how the C structs defined below and the Ruby
+ objects interact and hold references to each other. First, a few principles:
+
+ - Ruby's "TypedData" abstraction lets a Ruby VALUE hold a pointer to a C
+   struct (or arbitrary memory chunk), own it, and free it when collected.
+   Thus, each struct below will have a corresponding Ruby object
+   wrapping/owning it.
+
+ - To get back from an underlying upb {msg,enum}def to the Ruby object, we
+   keep a global hashmap, accessed by get_def_obj/add_def_obj below.
+
+ The in-memory structure is then something like:
+
+   Ruby                        |      upb
+                               |
+   DescriptorPool  ------------|-----------> upb_symtab____________________
+                               |                | (message types)          \
+                               |                v                           \
+   Descriptor   ---------------|-----------> upb_msgdef         (enum types)|
+    |--> msgclass              |                |   ^                       |
+    |    (dynamically built)   |                |   | (submsg fields)       |
+    |--> MessageLayout         |                |   |                       /
+    |--------------------------|> decoder method|   |                      /
+    \--------------------------|> serialize     |   |                     /
+                               |  handlers      v   |                    /
+   FieldDescriptor  -----------|-----------> upb_fielddef               /
+                               |                    |                  /
+                               |                    v (enum fields)   /
+   EnumDescriptor  ------------|-----------> upb_enumdef  <----------'
+                               |
+                               |
+               ^               |               \___/
+               `---------------|-----------------'    (get_def_obj map)
+ */
+
 // -----------------------------------------------------------------------------
 // Ruby class structure definitions.
 // -----------------------------------------------------------------------------
@@ -72,20 +108,19 @@ struct DescriptorPool {
 };
 
 struct Descriptor {
-  upb_msgdef* msgdef;
+  const upb_msgdef* msgdef;
   MessageLayout* layout;
   VALUE klass;  // begins as nil
-  VALUE fields;  // Ruby array of FieldDescriptor Ruby objects
   const upb_pbdecodermethod* fill_method;
   const upb_handlers* serialize_handlers;
 };
 
 struct FieldDescriptor {
-  upb_fielddef* fielddef;
+  const upb_fielddef* fielddef;
 };
 
 struct EnumDescriptor {
-  upb_enumdef* enumdef;
+  const upb_enumdef* enumdef;
   VALUE module;  // begins as nil
 };
 
@@ -112,6 +147,12 @@ extern VALUE cBuilder;
 
 extern const char* kDescriptorInstanceVar;
 
+// We forward-declare all of the Ruby method implementations here because we
+// sometimes call the methods directly across .c files, rather than going
+// through Ruby's method dispatching (e.g. during message parse). It's cleaner
+// to keep the list of object methods together than to split them between
+// static-in-file definitions and header declarations.
+
 void DescriptorPool_mark(void* _self);
 void DescriptorPool_free(void* _self);
 VALUE DescriptorPool_alloc(VALUE klass);
@@ -129,7 +170,7 @@ void Descriptor_register(VALUE module);
 Descriptor* ruby_to_Descriptor(VALUE value);
 VALUE Descriptor_name(VALUE _self);
 VALUE Descriptor_name_set(VALUE _self, VALUE str);
-VALUE Descriptor_fields(VALUE _self);
+VALUE Descriptor_each(VALUE _self);
 VALUE Descriptor_lookup(VALUE _self, VALUE name);
 VALUE Descriptor_add_field(VALUE _self, VALUE obj);
 VALUE Descriptor_msgclass(VALUE _self);
@@ -287,8 +328,7 @@ VALUE layout_inspect(MessageLayout* layout, void* storage);
 // -----------------------------------------------------------------------------
 
 struct MessageHeader {
-  VALUE descriptor_rb;
-  Descriptor* descriptor;  // kept alive by descriptor_rb reference.
+  Descriptor* descriptor;  // kept alive by self.class.descriptor reference.
   // Data comes after this.
 };
 
@@ -319,7 +359,8 @@ const upb_pbdecodermethod *new_fillmsg_decodermethod(
     Descriptor* descriptor, const void *owner);
 
 // -----------------------------------------------------------------------------
-// Global map from upb {msg,enum}defs to wrapper Descriptor/EnumDescriptor instances.
+// Global map from upb {msg,enum}defs to wrapper Descriptor/EnumDescriptor
+// instances.
 // -----------------------------------------------------------------------------
 void add_def_obj(const void* def, VALUE value);
 VALUE get_def_obj(const void* def);
@@ -329,5 +370,11 @@ VALUE get_def_obj(const void* def);
 // -----------------------------------------------------------------------------
 
 void check_upb_status(const upb_status* status, const char* msg);
+
+#define CHECK_UPB(code, msg) do {                                             \
+    upb_status status = UPB_STATUS_INIT;                                      \
+    code;                                                                     \
+    check_upb_status(&status, msg);                                           \
+} while (0)
 
 #endif  // __GOOGLE_PROTOBUF_RUBY_PROTOBUF_H__

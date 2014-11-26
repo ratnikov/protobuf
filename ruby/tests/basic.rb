@@ -360,6 +360,18 @@ module BasicTest
         Recursive2.descriptor
       assert Recursive2.descriptor.lookup("foo").subtype ==
         Recursive1.descriptor
+
+      serialized = Recursive1.encode(m)
+      m2 = Recursive1.decode(serialized)
+      assert m == m2
+    end
+
+    def test_serialize_cycle
+      m = Recursive1.new(:foo => Recursive2.new)
+      m.foo.foo = m
+      assert_raise RuntimeError do
+        serialized = Recursive1.encode(m)
+      end
     end
 
     def test_bad_field_names
@@ -506,7 +518,7 @@ module BasicTest
       m = TestMessage.new(:optional_int32 => 1234)
       msgdef = m.class.descriptor
       assert msgdef.class == Google::Protobuf::Descriptor
-      assert msgdef.fields.any? {|field| field.name == "optional_int32"}
+      assert msgdef.any? {|field| field.name == "optional_int32"}
       optional_int32 = msgdef.lookup "optional_int32"
       assert optional_int32.class == Google::Protobuf::FieldDescriptor
       assert optional_int32 != nil
