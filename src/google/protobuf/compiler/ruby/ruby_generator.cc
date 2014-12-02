@@ -190,7 +190,7 @@ void GenerateMessageAssignment(
     "prefix", prefix,
     "name", RubifyConstant(message->name()));
   printer->Print(
-    "Google::Protobuf::DescriptorPool.global_pool."
+    "Google::Protobuf::DescriptorPool.generated_pool."
     "lookup(\"$full_name$\").msgclass\n",
     "full_name", message->full_name());
 
@@ -212,7 +212,7 @@ void GenerateEnumAssignment(
     "prefix", prefix,
     "name", RubifyConstant(en->name()));
   printer->Print(
-    "Google::Protobuf::DescriptorPool.global_pool."
+    "Google::Protobuf::DescriptorPool.generated_pool."
     "lookup(\"$full_name$\").enummodule\n",
     "full_name", en->full_name());
 }
@@ -270,7 +270,7 @@ void GenerateFile(const google::protobuf::FileDescriptor* file,
   }
 
   printer->Print(
-    "Google::Protobuf::DescriptorPool.global_pool.build do\n");
+    "Google::Protobuf::DescriptorPool.generated_pool.build do\n");
   printer->Indent();
   for (int i = 0; i < file->message_type_count(); i++) {
     GenerateMessage(file->message_type(i), printer);

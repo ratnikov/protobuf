@@ -90,7 +90,7 @@ static upb_enumdef* check_enum_notfrozen(const upb_enumdef* def) {
 
 // Global singleton DescriptorPool. The user is free to create others, but this
 // is used by generated code.
-VALUE global_pool;
+VALUE generated_pool;
 
 DEFINE_CLASS(DescriptorPool, "Google::Protobuf::DescriptorPool");
 
@@ -122,13 +122,13 @@ void DescriptorPool_register(VALUE module) {
   rb_define_method(klass, "add", DescriptorPool_add, 1);
   rb_define_method(klass, "build", DescriptorPool_build, 0);
   rb_define_method(klass, "lookup", DescriptorPool_lookup, 1);
-  rb_define_singleton_method(klass, "global_pool",
-                             DescriptorPool_global_pool, 0);
+  rb_define_singleton_method(klass, "generated_pool",
+                             DescriptorPool_generated_pool, 0);
   cDescriptorPool = klass;
   rb_gc_register_address(&cDescriptorPool);
 
-  global_pool = rb_class_new_instance(0, NULL, klass);
-  rb_gc_register_address(&global_pool);
+  generated_pool = rb_class_new_instance(0, NULL, klass);
+  rb_gc_register_address(&generated_pool);
 }
 
 static void add_descriptor_to_pool(DescriptorPool* self,
@@ -206,15 +206,15 @@ VALUE DescriptorPool_lookup(VALUE _self, VALUE name) {
 
 /*
  * call-seq:
- *     DescriptorPool.global_pool => descriptor_pool
+ *     DescriptorPool.generated_pool => descriptor_pool
  *
  * Class method that returns the global DescriptorPool. This is a singleton into
  * which generated-code message and enum types are registered. The user may also
  * register types in this pool for convenience so that they do not have to hold
  * a reference to a private pool instance.
  */
-VALUE DescriptorPool_global_pool(VALUE _self) {
-  return global_pool;
+VALUE DescriptorPool_generated_pool(VALUE _self) {
+  return generated_pool;
 }
 
 // -----------------------------------------------------------------------------
