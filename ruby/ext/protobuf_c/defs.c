@@ -105,7 +105,7 @@ void DescriptorPool_free(void* _self) {
 
 /*
  * call-seq:
- *     DescriptorPool.alloc => pool
+ *     DescriptorPool.new => pool
  *
  * Creates a new, empty, descriptor pool.
  */
@@ -145,21 +145,6 @@ static void add_enumdesc_to_pool(DescriptorPool* self,
       upb_symtab_add(self->symtab, (upb_def**)&enumdesc->enumdef, 1,
                      NULL, &status),
       "Adding EnumDescriptor to DescriptorPool failed");
-}
-
-static void create_ruby_class_or_module(VALUE def) {
-  VALUE def_klass = rb_obj_class(def);
-  if (def_klass == cDescriptor) {
-    Descriptor* desc = ruby_to_Descriptor(def);
-    if (desc->klass == Qnil) {
-      desc->klass = build_class_from_descriptor(desc);
-    }
-  } else if (def_klass == cEnumDescriptor) {
-    EnumDescriptor* enumdesc = ruby_to_EnumDescriptor(def);
-    if (enumdesc->module == Qnil) {
-      enumdesc->module = build_module_from_enumdesc(enumdesc);
-    }
-  }
 }
 
 /*
@@ -394,7 +379,7 @@ VALUE Descriptor_msgclass(VALUE _self) {
              "Cannot fetch message class from a Descriptor not yet in a pool.");
   }
   if (self->klass == Qnil) {
-    create_ruby_class_or_module(_self);
+    self->klass = build_class_from_descriptor(self);
   }
   return self->klass;
 }
@@ -788,8 +773,9 @@ void EnumDescriptor_register(VALUE module) {
   rb_define_method(klass, "add_value", EnumDescriptor_add_value, 2);
   rb_define_method(klass, "lookup_name", EnumDescriptor_lookup_name, 1);
   rb_define_method(klass, "lookup_value", EnumDescriptor_lookup_value, 1);
-  rb_define_method(klass, "values", EnumDescriptor_values, 0);
+  rb_define_method(klass, "each", EnumDescriptor_each, 0);
   rb_define_method(klass, "enummodule", EnumDescriptor_enummodule, 0);
+  rb_include_module(klass, rb_mEnumerable);
   cEnumDescriptor = klass;
   rb_gc_register_address(&cEnumDescriptor);
 }
@@ -877,14 +863,13 @@ VALUE EnumDescriptor_lookup_value(VALUE _self, VALUE number) {
 
 /*
  * call-seq:
- *     EnumDescriptor.values => value_map
+ *     EnumDescriptor.each(&block)
  *
- * Returns a hashmap of key => value mappings corresponding to this enum's
- * definition. Keys are returned as Ruby symbols.
+ * Iterates over key => value mappings in this enum's definition, yielding to
+ * the block with (key, value) arguments for each one.
  */
-VALUE EnumDescriptor_values(VALUE _self) {
+VALUE EnumDescriptor_each(VALUE _self) {
   DEFINE_SELF(EnumDescriptor, self, _self);
-  VALUE ret = rb_hash_new();
 
   upb_enum_iter it;
   for (upb_enum_begin(&it, self->enumdef);
@@ -892,10 +877,10 @@ VALUE EnumDescriptor_values(VALUE _self) {
        upb_enum_next(&it)) {
     VALUE key = ID2SYM(rb_intern(upb_enum_iter_name(&it)));
     VALUE number = INT2NUM(upb_enum_iter_number(&it));
-    rb_hash_aset(ret, key, number);
+    rb_yield_values(2, key, number);
   }
 
-  return ret;
+  return Qnil;
 }
 
 /*
@@ -913,7 +898,7 @@ VALUE EnumDescriptor_enummodule(VALUE _self) {
              "in a pool.");
   }
   if (self->module == Qnil) {
-    create_ruby_class_or_module(_self);
+    self->module = build_module_from_enumdesc(self);
   }
   return self->module;
 }

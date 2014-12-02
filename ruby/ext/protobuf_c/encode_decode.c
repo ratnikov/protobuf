@@ -376,6 +376,10 @@ void stringsink_uninit(stringsink *sink) {
 // semantics, which means that we have true field presence, we will want to
 // modify msgvisitor so that it emits all present fields rather than all
 // non-default-value fields.
+//
+// Likewise, when implementing JSON serialization, we may need to have a
+// 'verbose' mode that outputs all fields and a 'concise' mode that outputs only
+// those with non-default values.
 
 static void putmsg(VALUE msg, const Descriptor* desc,
                    upb_sink *sink, int depth);
@@ -460,15 +464,13 @@ static void putary(VALUE ary, const upb_fielddef *f, upb_sink *sink,
   upb_sink_endseq(sink, getsel(f, UPB_HANDLER_ENDSEQ));
 }
 
-static const int kMaxMessageDepth = 64;
-
 static void putmsg(VALUE msg_rb, const Descriptor* desc,
                    upb_sink *sink, int depth) {
   upb_sink_startmsg(sink);
 
   // Protect against cycles (possible because users may freely reassign message
   // and repeated fields) by imposing a maximum recursion depth.
-  if (depth > kMaxMessageDepth) {
+  if (depth > UPB_SINK_MAX_NESTING) {
     rb_raise(rb_eRuntimeError,
              "Maximum recursion depth exceeded during encoding.");
   }

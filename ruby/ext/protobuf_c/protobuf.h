@@ -64,7 +64,7 @@ typedef struct EnumBuilderContext EnumBuilderContext;
 typedef struct Builder Builder;
 
 /*
- It can be a big confusing how the C structs defined below and the Ruby
+ It can be a bit confusing how the C structs defined below and the Ruby
  objects interact and hold references to each other. First, a few principles:
 
  - Ruby's "TypedData" abstraction lets a Ruby VALUE hold a pointer to a C
@@ -207,7 +207,7 @@ VALUE EnumDescriptor_name_set(VALUE _self, VALUE str);
 VALUE EnumDescriptor_add_value(VALUE _self, VALUE name, VALUE number);
 VALUE EnumDescriptor_lookup_name(VALUE _self, VALUE name);
 VALUE EnumDescriptor_lookup_value(VALUE _self, VALUE number);
-VALUE EnumDescriptor_values(VALUE _self);
+VALUE EnumDescriptor_each(VALUE _self);
 VALUE EnumDescriptor_enummodule(VALUE _self);
 extern const rb_data_type_t _EnumDescriptor_type;
 

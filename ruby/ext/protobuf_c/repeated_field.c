@@ -96,8 +96,8 @@ VALUE RepeatedField_index(VALUE _self, VALUE _index) {
  * call-seq:
  *     RepeatedField.[]=(index, value)
  *
- * Sets the element at the given index. Throws an exception on out-of-bounds
- * errors.
+ * Sets the element at the given index. On out-of-bounds assignments, extends
+ * the array and fills the hole (if any) with default values.
  */
 VALUE RepeatedField_index_set(VALUE _self, VALUE _index, VALUE val) {
   RepeatedField* self = ruby_to_RepeatedField(_self);
@@ -106,8 +106,18 @@ VALUE RepeatedField_index_set(VALUE _self, VALUE _index, VALUE val) {
   int element_size = native_slot_size(field_type);
 
   int index = NUM2INT(_index);
-  if (index < 0 || index >= self->size) {
+  if (index < 0 || index >= (INT_MAX - 1)) {
     rb_raise(rb_eRangeError, "Index out of range");
+  }
+  if (index >= self->size) {
+    RepeatedField_reserve(self, index + 1);
+    upb_fieldtype_t field_type = self->field_type;
+    int element_size = native_slot_size(field_type);
+    for (int i = self->size; i <= index; i++) {
+      void* elem = (void *)(((uint8_t *)self->elements) + index * element_size);
+      native_slot_init(field_type, elem);
+    }
+    self->size = index + 1;
   }
 
   void* memory = (void *) (((uint8_t *)self->elements) + index * element_size);
@@ -152,7 +162,7 @@ VALUE RepeatedField_push(VALUE _self, VALUE val) {
   native_slot_set(field_type, self->field_type_class, memory, val);
   // native_slot_set may raise an error; bump index only after set.
   self->size++;
-  return Qnil;
+  return _self;
 }
 
 // Used by parsing handlers.
@@ -570,6 +580,7 @@ void RepeatedField_register(VALUE module) {
   rb_define_method(klass, "[]", RepeatedField_index, 1);
   rb_define_method(klass, "[]=", RepeatedField_index_set, 2);
   rb_define_method(klass, "push", RepeatedField_push, 1);
+  rb_define_method(klass, "<<", RepeatedField_push, 1);
   rb_define_method(klass, "pop", RepeatedField_pop, 0);
   rb_define_method(klass, "insert", RepeatedField_insert, -1);
   rb_define_method(klass, "replace", RepeatedField_replace, 1);

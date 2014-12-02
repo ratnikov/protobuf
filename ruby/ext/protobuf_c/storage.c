@@ -486,22 +486,19 @@ VALUE layout_eq(MessageLayout* layout, void* msg1, void* msg2) {
 }
 
 VALUE layout_hash(MessageLayout* layout, void* storage) {
-  VALUE hash = LL2NUM(0);
-
   upb_msg_iter it;
+  st_index_t h = rb_hash_start(0);
+  VALUE hash_sym = rb_intern("hash");
   for (upb_msg_begin(&it, layout->msgdef);
        !upb_msg_done(&it);
        upb_msg_next(&it)) {
     const upb_fielddef* field = upb_msg_iter_field(&it);
     VALUE field_val = layout_get(layout, storage, field);
-
-    // hash = (hash << 2) ^ field.hash();
-    hash = rb_funcall(hash, rb_intern("<<"), 1, INT2NUM(2));
-    hash = rb_funcall(hash, rb_intern("^"), 1,
-                      rb_funcall(field_val, rb_intern("hash"), 0));
+    h = rb_hash_uint(h, NUM2LONG(rb_funcall(field_val, hash_sym, 0)));
   }
+  h = rb_hash_end(h);
 
-  return hash;
+  return INT2FIX(h);
 }
 
 VALUE layout_inspect(MessageLayout* layout, void* storage) {

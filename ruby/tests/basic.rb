@@ -127,6 +127,16 @@ module BasicTest
       assert m.inspect == expected
     end
 
+    def test_hash
+      m1 = TestMessage.new(:optional_int32 => 42)
+      m2 = TestMessage.new(:optional_int32 => 102)
+      assert m1.hash != 0
+      assert m2.hash != 0
+      # relying on the randomness here -- if hash function changes and we are
+      # unlucky enough to get a collision, then change the values above.
+      assert m1.hash != m2.hash
+    end
+
     def test_type_errors
       m = TestMessage.new
       assert_raise TypeError do
@@ -215,6 +225,15 @@ module BasicTest
       l += [1, 2, 3, 4]
       l.replace([5, 6, 7, 8])
       assert l == [5, 6, 7, 8]
+
+      l4 = Google::Protobuf::RepeatedField.new(:int32)
+      l4[5] = 42
+      assert l4 == [0, 0, 0, 0, 0, 42]
+
+      l4 << 100
+      assert l4 == [0, 0, 0, 0, 0, 42, 100]
+      l4 << 101 << 102
+      assert l4 == [0, 0, 0, 0, 0, 42, 100, 101, 102]
     end
 
     def test_rptfield_msg
@@ -539,7 +558,7 @@ module BasicTest
       optional_enum = msgdef.lookup "optional_enum"
       assert optional_enum.subtype == TestEnum.descriptor
       assert optional_enum.subtype.class == Google::Protobuf::EnumDescriptor
-      optional_enum.subtype.values.each do |k, v|
+      optional_enum.subtype.each do |k, v|
         # set with integer, check resolution to symbolic name
         optional_enum.set(m, v)
         assert optional_enum.get(m) == k
