@@ -261,13 +261,17 @@ void native_slot_mark(upb_fieldtype_t type, void* memory) {
 }
 
 void native_slot_dup(upb_fieldtype_t type, void* to, void* from) {
+  memcpy(to, from, native_slot_size(type));
+}
+
+void native_slot_clone(upb_fieldtype_t type, void* to, void* from) {
   switch (type) {
     case UPB_TYPE_STRING:
     case UPB_TYPE_BYTES:
     case UPB_TYPE_MESSAGE: {
       VALUE from_val = DEREF(from, VALUE);
       DEREF(to, VALUE) = (from_val != Qnil) ?
-          rb_funcall(from_val, rb_intern("dup"), 0) : Qnil;
+          rb_funcall(from_val, rb_intern("clone"), 0) : Qnil;
       break;
     }
     default:
@@ -455,6 +459,25 @@ void layout_dup(MessageLayout* layout, void* to, void* from) {
       *((VALUE *)to_memory) = RepeatedField_dup(*((VALUE *)from_memory));
     } else {
       native_slot_dup(upb_fielddef_type(field), to_memory, from_memory);
+    }
+  }
+}
+
+void layout_clone(MessageLayout* layout, void* to, void* from) {
+  upb_msg_iter it;
+  for (upb_msg_begin(&it, layout->msgdef);
+       !upb_msg_done(&it);
+       upb_msg_next(&it)) {
+    const upb_fielddef* field = upb_msg_iter_field(&it);
+    void* to_memory = ((uint8_t *)to) +
+        layout->offsets[upb_fielddef_index(field)];
+    void* from_memory = ((uint8_t *)from) +
+        layout->offsets[upb_fielddef_index(field)];
+
+    if (upb_fielddef_label(field) == UPB_LABEL_REPEATED) {
+      *((VALUE *)to_memory) = RepeatedField_clone(*((VALUE *)from_memory));
+    } else {
+      native_slot_clone(upb_fielddef_type(field), to_memory, from_memory);
     }
   }
 }

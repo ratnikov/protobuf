@@ -186,7 +186,7 @@ VALUE Message_initialize(int argc, VALUE* argv, VALUE _self) {
  * call-seq:
  *     Message.dup => new_message
  *
- * Performs a deep copy of this message and returns the new copy.
+ * Performs a shallow copy of this message and returns the new copy.
  */
 VALUE Message_dup(VALUE _self) {
   MessageHeader* self;
@@ -199,6 +199,27 @@ VALUE Message_dup(VALUE _self) {
   layout_dup(self->descriptor->layout,
              Message_data(new_msg_self),
              Message_data(self));
+
+  return new_msg;
+}
+
+/*
+ * call-seq:
+ *     Message.clone => new_message
+ *
+ * Performs a deep copy of this message and returns the new copy.
+ */
+VALUE Message_clone(VALUE _self) {
+  MessageHeader* self;
+  TypedData_Get_Struct(_self, MessageHeader, &Message_type, self);
+
+  VALUE new_msg = rb_class_new_instance(0, NULL, CLASS_OF(_self));
+  MessageHeader* new_msg_self;
+  TypedData_Get_Struct(new_msg, MessageHeader, &Message_type, new_msg_self);
+
+  layout_clone(self->descriptor->layout,
+               Message_data(new_msg_self),
+               Message_data(self));
 
   return new_msg;
 }
@@ -303,6 +324,17 @@ VALUE Message_index_set(VALUE _self, VALUE field_name, VALUE value) {
 
 /*
  * call-seq:
+ *     Message.encode! => encoded_bytes
+ *
+ * Encodes a message's content to serialized bytes in protobuf wire format.
+ */
+VALUE Message_instance_encode(VALUE _self) {
+  VALUE klass = CLASS_OF(_self);
+  return rb_funcall(klass, rb_intern("encode"), 1, _self);
+}
+
+/*
+ * call-seq:
  *     Message.descriptor => descriptor
  *
  * Class method that returns the Descriptor instance corresponding to this
@@ -340,11 +372,13 @@ VALUE build_class_from_descriptor(Descriptor* desc) {
                    Message_method_missing, -1);
   rb_define_method(klass, "initialize", Message_initialize, -1);
   rb_define_method(klass, "dup", Message_dup, 0);
+  rb_define_method(klass, "clone", Message_clone, 0);
   rb_define_method(klass, "==", Message_eq, 1);
   rb_define_method(klass, "hash", Message_hash, 0);
   rb_define_method(klass, "inspect", Message_inspect, 0);
   rb_define_method(klass, "[]", Message_index, 1);
   rb_define_method(klass, "[]=", Message_index_set, 2);
+  rb_define_method(klass, "encode!", Message_instance_encode, 0);
   rb_define_singleton_method(klass, "decode", Message_decode, 1);
   rb_define_singleton_method(klass, "encode", Message_encode, 1);
   rb_define_singleton_method(klass, "descriptor", Message_descriptor, 0);

@@ -276,9 +276,8 @@ static VALUE RepeatedField_new_this_type(VALUE _self) {
  * call-seq:
  *     RepeatedField.dup => repeated_field
  *
- * Duplicates this repeated field. This performs a deep clone: if the repeated
- * field elements are messages, each message is also duplicated with its #dup
- * method.
+ * Duplicates this repeated field with a shallow copy. References to all
+ * non-primitive element objects (e.g., submessages) are shared.
  */
 VALUE RepeatedField_dup(VALUE _self) {
   RepeatedField* self = ruby_to_RepeatedField(_self);
@@ -298,7 +297,14 @@ VALUE RepeatedField_dup(VALUE _self) {
   return new_rptfield;
 }
 
-VALUE RepeatedField_shallow_dup(VALUE _self) {
+/*
+ * call-seq:
+ *     RepeatedField.clone => repeated_field
+ *
+ * Duplicates this repeated field with a deep copy, using the #clone method on
+ * members.
+ */
+VALUE RepeatedField_clone(VALUE _self) {
   RepeatedField* self = ruby_to_RepeatedField(_self);
   VALUE new_rptfield = RepeatedField_new_this_type(_self);
   RepeatedField* new_rptfield_self = ruby_to_RepeatedField(new_rptfield);
@@ -309,7 +315,7 @@ VALUE RepeatedField_shallow_dup(VALUE _self) {
   for (int i = 0; i < self->size; i++, off += elem_size) {
     void* to_mem = (uint8_t *)new_rptfield_self->elements + off;
     void* from_mem = (uint8_t *)self->elements + off;
-    memcpy(to_mem, from_mem, native_slot_size(field_type));
+    native_slot_clone(field_type, to_mem, from_mem);
     new_rptfield_self->size++;
   }
 
@@ -431,7 +437,7 @@ VALUE RepeatedField_inspect(VALUE _self) {
  * be either another repeated field or a Ruby array.
  */
 VALUE RepeatedField_plus(VALUE _self, VALUE list) {
-  VALUE dupped = RepeatedField_shallow_dup(_self);
+  VALUE dupped = RepeatedField_dup(_self);
 
   if (TYPE(list) == T_ARRAY) {
     for (int i = 0; i < RARRAY_LEN(list); i++) {
@@ -587,6 +593,7 @@ void RepeatedField_register(VALUE module) {
   rb_define_method(klass, "clear", RepeatedField_clear, 0);
   rb_define_method(klass, "length", RepeatedField_length, 0);
   rb_define_method(klass, "dup", RepeatedField_dup, 0);
+  rb_define_method(klass, "clone", RepeatedField_clone, 0);
   rb_define_method(klass, "==", RepeatedField_eq, 1);
   rb_define_method(klass, "hash", RepeatedField_hash, 0);
   rb_define_method(klass, "inspect", RepeatedField_inspect, 0);

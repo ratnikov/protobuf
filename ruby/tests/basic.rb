@@ -249,6 +249,10 @@ module BasicTest
 
       l2 = l.dup
       assert l2[0] == l[0]
+      assert l2[0].object_id == l[0].object_id
+
+      l2 = l.clone
+      assert l2[0] == l[0]
       assert l2[0].object_id != l[0].object_id
 
       l3 = l + l2
@@ -321,6 +325,16 @@ module BasicTest
       m.optional_int32 += 1
       assert m != m2
       assert m.repeated_msg[0] == m2.repeated_msg[0]
+      assert m.repeated_msg[0].object_id == m2.repeated_msg[0].object_id
+    end
+
+    def test_clone
+      m = TestMessage.new(:optional_int32 => 42,
+                          :repeated_msg => [TestMessage2.new(:foo => 100)])
+      m2 = m.clone
+      assert m == m2
+      assert m.repeated_msg == m2.repeated_msg
+      assert m.repeated_msg.object_id != m2.repeated_msg.object_id
       assert m.repeated_msg[0].object_id != m2.repeated_msg[0].object_id
     end
 
@@ -383,6 +397,8 @@ module BasicTest
       serialized = Recursive1.encode(m)
       m2 = Recursive1.decode(serialized)
       assert m == m2
+
+      assert m.encode! == serialized
     end
 
     def test_serialize_cycle
