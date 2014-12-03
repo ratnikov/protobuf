@@ -273,6 +273,14 @@ static const upb_pbdecodermethod *msgdef_decodermethod(Descriptor* desc) {
   return desc->fill_method;
 }
 
+/*
+ * call-seq:
+ *     MessageClass.decode(data) => message
+ *
+ * Decodes the given data (as a string containing bytes in protocol buffers wire
+ * format) under the interpretration given by this message class's definition
+ * and returns a message object with the corresponding field values.
+ */
 VALUE Message_decode(VALUE klass, VALUE data) {
   VALUE descriptor = rb_iv_get(klass, kDescriptorInstanceVar);
   Descriptor* desc = ruby_to_Descriptor(descriptor);
@@ -542,6 +550,13 @@ static const upb_handlers* msgdef_serialize_handlers(Descriptor* desc) {
   return desc->serialize_handlers;
 }
 
+/*
+ * call-seq:
+ *     MessageClass.encode(msg) => bytes
+ *
+ * Encodes the given message object to its serialized form in protocol buffers
+ * wire format.
+ */
 VALUE Message_encode(VALUE klass, VALUE msg_rb) {
   VALUE descriptor = rb_iv_get(klass, kDescriptorInstanceVar);
   Descriptor* desc = ruby_to_Descriptor(descriptor);
@@ -566,3 +581,26 @@ VALUE Message_encode(VALUE klass, VALUE msg_rb) {
   return ret;
 }
 
+/*
+ * call-seq:
+ *     Google::Protobuf.encode(msg) => bytes
+ *
+ * Encodes the given message object to protocol buffers wire format. This is an
+ * alternative to the #encode method on msg's class.
+ */
+VALUE Google_Protobuf_encode(VALUE self, VALUE msg_rb) {
+  VALUE klass = CLASS_OF(msg_rb);
+  return rb_funcall(klass, rb_intern("encode"), 1, msg_rb);
+}
+
+/*
+ * call-seq:
+ *     Google::Protobuf.decode(class, bytes) => msg
+ *
+ * Decodes the given bytes as protocol buffers wire format under the
+ * interpretation given by the given class's message definition. This is an
+ * alternative to the #decode method on the given class.
+ */
+VALUE Google_Protobuf_decode(VALUE self, VALUE klass, VALUE msg_rb) {
+  return rb_funcall(klass, rb_intern("decode"), 1, msg_rb);
+}

@@ -324,17 +324,6 @@ VALUE Message_index_set(VALUE _self, VALUE field_name, VALUE value) {
 
 /*
  * call-seq:
- *     Message.encode! => encoded_bytes
- *
- * Encodes a message's content to serialized bytes in protobuf wire format.
- */
-VALUE Message_instance_encode(VALUE _self) {
-  VALUE klass = CLASS_OF(_self);
-  return rb_funcall(klass, rb_intern("encode"), 1, _self);
-}
-
-/*
- * call-seq:
  *     Message.descriptor => descriptor
  *
  * Class method that returns the Descriptor instance corresponding to this
@@ -378,7 +367,6 @@ VALUE build_class_from_descriptor(Descriptor* desc) {
   rb_define_method(klass, "inspect", Message_inspect, 0);
   rb_define_method(klass, "[]", Message_index, 1);
   rb_define_method(klass, "[]=", Message_index_set, 2);
-  rb_define_method(klass, "encode!", Message_instance_encode, 0);
   rb_define_singleton_method(klass, "decode", Message_decode, 1);
   rb_define_singleton_method(klass, "encode", Message_encode, 1);
   rb_define_singleton_method(klass, "descriptor", Message_descriptor, 0);

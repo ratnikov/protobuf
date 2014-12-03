@@ -363,6 +363,10 @@ module BasicTest
       data = TestMessage.encode m
       m2 = TestMessage.decode data
       assert m == m2
+
+      data = Google::Protobuf.encode m
+      m2 = Google::Protobuf.decode(TestMessage, data)
+      assert m == m2
     end
 
     def test_def_errors
@@ -397,8 +401,6 @@ module BasicTest
       serialized = Recursive1.encode(m)
       m2 = Recursive1.decode(serialized)
       assert m == m2
-
-      assert m.encode! == serialized
     end
 
     def test_serialize_cycle
