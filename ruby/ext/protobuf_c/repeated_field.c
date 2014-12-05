@@ -298,7 +298,7 @@ VALUE RepeatedField_dup(VALUE _self) {
 }
 
 // Internal only: used by Google::Protobuf.deep_copy.
-VALUE RepeatedField_clone(VALUE _self) {
+VALUE RepeatedField_deep_copy(VALUE _self) {
   RepeatedField* self = ruby_to_RepeatedField(_self);
   VALUE new_rptfield = RepeatedField_new_this_type(_self);
   RepeatedField* new_rptfield_self = ruby_to_RepeatedField(new_rptfield);
@@ -309,7 +309,7 @@ VALUE RepeatedField_clone(VALUE _self) {
   for (int i = 0; i < self->size; i++, off += elem_size) {
     void* to_mem = (uint8_t *)new_rptfield_self->elements + off;
     void* from_mem = (uint8_t *)self->elements + off;
-    native_slot_clone(field_type, to_mem, from_mem);
+    native_slot_deep_copy(field_type, to_mem, from_mem);
     new_rptfield_self->size++;
   }
 
@@ -587,6 +587,8 @@ void RepeatedField_register(VALUE module) {
   rb_define_method(klass, "clear", RepeatedField_clear, 0);
   rb_define_method(klass, "length", RepeatedField_length, 0);
   rb_define_method(klass, "dup", RepeatedField_dup, 0);
+  // Also define #clone so that we don't inherit Object#clone.
+  rb_define_method(klass, "clone", RepeatedField_dup, 0);
   rb_define_method(klass, "==", RepeatedField_eq, 1);
   rb_define_method(klass, "hash", RepeatedField_hash, 0);
   rb_define_method(klass, "inspect", RepeatedField_inspect, 0);

@@ -204,7 +204,7 @@ VALUE Message_dup(VALUE _self) {
 }
 
 // Internal only; used by Google::Protobuf.deep_copy.
-VALUE Message_clone(VALUE _self) {
+VALUE Message_deep_copy(VALUE _self) {
   MessageHeader* self;
   TypedData_Get_Struct(_self, MessageHeader, &Message_type, self);
 
@@ -212,9 +212,9 @@ VALUE Message_clone(VALUE _self) {
   MessageHeader* new_msg_self;
   TypedData_Get_Struct(new_msg, MessageHeader, &Message_type, new_msg_self);
 
-  layout_clone(self->descriptor->layout,
-               Message_data(new_msg_self),
-               Message_data(self));
+  layout_deep_copy(self->descriptor->layout,
+                   Message_data(new_msg_self),
+                   Message_data(self));
 
   return new_msg;
 }
@@ -356,6 +356,8 @@ VALUE build_class_from_descriptor(Descriptor* desc) {
                    Message_method_missing, -1);
   rb_define_method(klass, "initialize", Message_initialize, -1);
   rb_define_method(klass, "dup", Message_dup, 0);
+  // Also define #clone so that we don't inherit Object#clone.
+  rb_define_method(klass, "clone", Message_dup, 0);
   rb_define_method(klass, "==", Message_eq, 1);
   rb_define_method(klass, "hash", Message_hash, 0);
   rb_define_method(klass, "inspect", Message_inspect, 0);
@@ -456,8 +458,8 @@ VALUE build_module_from_enumdesc(EnumDescriptor* enumdesc) {
 VALUE Google_Protobuf_deep_copy(VALUE self, VALUE obj) {
   VALUE klass = CLASS_OF(obj);
   if (klass == cRepeatedField) {
-    return RepeatedField_clone(obj);
+    return RepeatedField_deep_copy(obj);
   } else {
-    return Message_clone(obj);
+    return Message_deep_copy(obj);
   }
 }
