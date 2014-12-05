@@ -257,7 +257,7 @@ VALUE native_slot_get(upb_fieldtype_t type,
 void native_slot_init(upb_fieldtype_t type, void* memory);
 void native_slot_mark(upb_fieldtype_t type, void* memory);
 void native_slot_dup(upb_fieldtype_t type, void* to, void* from);
-void native_slot_clone(upb_fieldtype_t type, void* to, void* from);
+void native_slot_deep_copy(upb_fieldtype_t type, void* to, void* from);
 bool native_slot_eq(upb_fieldtype_t type, void* mem1, void* mem2);
 
 // -----------------------------------------------------------------------------
@@ -297,7 +297,7 @@ VALUE RepeatedField_replace(VALUE _self, VALUE list);
 VALUE RepeatedField_clear(VALUE _self);
 VALUE RepeatedField_length(VALUE _self);
 VALUE RepeatedField_dup(VALUE _self);
-VALUE RepeatedField_clone(VALUE _self);
+VALUE RepeatedField_deep_copy(VALUE _self);
 VALUE RepeatedField_eq(VALUE _self, VALUE _other);
 VALUE RepeatedField_hash(VALUE _self);
 VALUE RepeatedField_inspect(VALUE _self);
@@ -325,7 +325,7 @@ void layout_set(MessageLayout* layout,
 void layout_init(MessageLayout* layout, void* storage);
 void layout_mark(MessageLayout* layout, void* storage);
 void layout_dup(MessageLayout* layout, void* to, void* from);
-void layout_clone(MessageLayout* layout, void* to, void* from);
+void layout_deep_copy(MessageLayout* layout, void* to, void* from);
 VALUE layout_eq(MessageLayout* layout, void* msg1, void* msg2);
 VALUE layout_hash(MessageLayout* layout, void* storage);
 VALUE layout_inspect(MessageLayout* layout, void* storage);
@@ -349,7 +349,7 @@ VALUE Message_alloc(VALUE klass);
 VALUE Message_method_missing(int argc, VALUE* argv, VALUE _self);
 VALUE Message_initialize(int argc, VALUE* argv, VALUE _self);
 VALUE Message_dup(VALUE _self);
-VALUE Message_clone(VALUE _self);
+VALUE Message_deep_copy(VALUE _self);
 VALUE Message_eq(VALUE _self, VALUE _other);
 VALUE Message_hash(VALUE _self);
 VALUE Message_inspect(VALUE _self);

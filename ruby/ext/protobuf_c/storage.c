@@ -264,7 +264,7 @@ void native_slot_dup(upb_fieldtype_t type, void* to, void* from) {
   memcpy(to, from, native_slot_size(type));
 }
 
-void native_slot_clone(upb_fieldtype_t type, void* to, void* from) {
+void native_slot_deep_copy(upb_fieldtype_t type, void* to, void* from) {
   switch (type) {
     case UPB_TYPE_STRING:
     case UPB_TYPE_BYTES: {
@@ -276,7 +276,7 @@ void native_slot_clone(upb_fieldtype_t type, void* to, void* from) {
     case UPB_TYPE_MESSAGE: {
       VALUE from_val = DEREF(from, VALUE);
       DEREF(to, VALUE) = (from_val != Qnil) ?
-          Message_clone(from_val) : Qnil;
+          Message_deep_copy(from_val) : Qnil;
       break;
     }
     default:
@@ -468,7 +468,7 @@ void layout_dup(MessageLayout* layout, void* to, void* from) {
   }
 }
 
-void layout_clone(MessageLayout* layout, void* to, void* from) {
+void layout_deep_copy(MessageLayout* layout, void* to, void* from) {
   upb_msg_iter it;
   for (upb_msg_begin(&it, layout->msgdef);
        !upb_msg_done(&it);
@@ -480,9 +480,9 @@ void layout_clone(MessageLayout* layout, void* to, void* from) {
         layout->offsets[upb_fielddef_index(field)];
 
     if (upb_fielddef_label(field) == UPB_LABEL_REPEATED) {
-      *((VALUE *)to_memory) = RepeatedField_clone(*((VALUE *)from_memory));
+      *((VALUE *)to_memory) = RepeatedField_deep_copy(*((VALUE *)from_memory));
     } else {
-      native_slot_clone(upb_fielddef_type(field), to_memory, from_memory);
+      native_slot_deep_copy(upb_fielddef_type(field), to_memory, from_memory);
     }
   }
 }
