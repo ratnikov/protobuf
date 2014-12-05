@@ -234,11 +234,19 @@ void Descriptor_free(void* _self) {
   if (self->layout) {
     free_layout(self->layout);
   }
+  if (self->fill_handlers) {
+    upb_handlers_unref(self->fill_handlers, &self->fill_handlers);
+  }
   if (self->fill_method) {
     upb_pbdecodermethod_unref(self->fill_method, &self->fill_method);
   }
-  if (self->serialize_handlers) {
-    upb_handlers_unref(self->serialize_handlers, &self->serialize_handlers);
+  if (self->pb_serialize_handlers) {
+    upb_handlers_unref(self->pb_serialize_handlers,
+                       &self->pb_serialize_handlers);
+  }
+  if (self->json_serialize_handlers) {
+    upb_handlers_unref(self->pb_serialize_handlers,
+                       &self->json_serialize_handlers);
   }
   xfree(self);
 }
@@ -258,8 +266,10 @@ VALUE Descriptor_alloc(VALUE klass) {
   self->msgdef = upb_msgdef_new(&self->msgdef);
   self->klass = Qnil;
   self->layout = NULL;
+  self->fill_handlers = NULL;
   self->fill_method = NULL;
-  self->serialize_handlers = NULL;
+  self->pb_serialize_handlers = NULL;
+  self->json_serialize_handlers = NULL;
   return ret;
 }
 

@@ -39,6 +39,8 @@
 #include "upb/pb/decoder.h"
 #include "upb/pb/encoder.h"
 #include "upb/pb/glue.h"
+#include "upb/json/parser.h"
+#include "upb/json/printer.h"
 #include "upb/shim/shim.h"
 #include "upb/symtab.h"
 
@@ -111,8 +113,10 @@ struct Descriptor {
   const upb_msgdef* msgdef;
   MessageLayout* layout;
   VALUE klass;  // begins as nil
+  const upb_handlers* fill_handlers;
   const upb_pbdecodermethod* fill_method;
-  const upb_handlers* serialize_handlers;
+  const upb_handlers* pb_serialize_handlers;
+  const upb_handlers* json_serialize_handlers;
 };
 
 struct FieldDescriptor {
@@ -354,9 +358,13 @@ VALUE Message_index_set(VALUE _self, VALUE field_name, VALUE value);
 VALUE Message_descriptor(VALUE klass);
 VALUE Message_decode(VALUE klass, VALUE data);
 VALUE Message_encode(VALUE klass, VALUE msg_rb);
+VALUE Message_decode_json(VALUE klass, VALUE data);
+VALUE Message_encode_json(VALUE klass, VALUE msg_rb);
 
 VALUE Google_Protobuf_encode(VALUE self, VALUE msg_rb);
 VALUE Google_Protobuf_decode(VALUE self, VALUE klass, VALUE msg_rb);
+VALUE Google_Protobuf_encode_json(VALUE self, VALUE msg_rb);
+VALUE Google_Protobuf_decode_json(VALUE self, VALUE klass, VALUE msg_rb);
 
 VALUE build_module_from_enumdesc(EnumDescriptor* enumdef);
 VALUE enum_lookup(VALUE self, VALUE number);

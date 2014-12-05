@@ -78,6 +78,10 @@ void Init_protobuf_c() {
   RepeatedField_register(protobuf);
   rb_define_singleton_method(protobuf, "encode", Google_Protobuf_encode, 1);
   rb_define_singleton_method(protobuf, "decode", Google_Protobuf_decode, 2);
+  rb_define_singleton_method(protobuf, "encode_json",
+                             Google_Protobuf_encode_json, 1);
+  rb_define_singleton_method(protobuf, "decode_json",
+                             Google_Protobuf_decode_json, 2);
 
   upb_def_to_ruby_obj_map = rb_hash_new();
   rb_gc_register_address(&upb_def_to_ruby_obj_map);

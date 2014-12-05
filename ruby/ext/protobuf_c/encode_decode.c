@@ -255,13 +255,12 @@ static const upb_handlers *new_fill_handlers(Descriptor* desc,
 // This is called from the message class creation code.
 const upb_pbdecodermethod *new_fillmsg_decodermethod(Descriptor* desc,
                                                      const void* owner) {
-  const upb_handlers *fill_handlers =
-      new_fill_handlers(desc, &fill_handlers);
+  desc->fill_handlers =
+      new_fill_handlers(desc, &desc->fill_handlers);
   upb_pbdecodermethodopts opts;
-  upb_pbdecodermethodopts_init(&opts, fill_handlers);
+  upb_pbdecodermethodopts_init(&opts, desc->fill_handlers);
 
   const upb_pbdecodermethod *ret = upb_pbdecodermethod_new(&opts, owner);
-  upb_handlers_unref(fill_handlers, &fill_handlers);
   return ret;
 }
 
@@ -307,6 +306,50 @@ VALUE Message_decode(VALUE klass, VALUE data) {
                     upb_pbdecoder_input(&decoder));
 
   upb_pbdecoder_uninit(&decoder);
+  if (!upb_ok(&status)) {
+    rb_raise(rb_eRuntimeError, "Error occurred during parsing: %s.",
+             upb_status_errmsg(&status));
+  }
+
+  return msg_rb;
+}
+
+/*
+ * call-seq:
+ *     MessageClass.decode_json(data) => message
+ *
+ * Decodes the given data (as a string containing bytes in protocol buffers wire
+ * format) under the interpretration given by this message class's definition
+ * and returns a message object with the corresponding field values.
+ */
+VALUE Message_decode_json(VALUE klass, VALUE data) {
+  VALUE descriptor = rb_iv_get(klass, kDescriptorInstanceVar);
+  Descriptor* desc = ruby_to_Descriptor(descriptor);
+  VALUE msgklass = Descriptor_msgclass(descriptor);
+
+  if (TYPE(data) != T_STRING) {
+    rb_raise(rb_eArgError, "Expected string for binary protobuf data.");
+  }
+
+  VALUE msg_rb = rb_class_new_instance(0, NULL, msgklass);
+  MessageHeader* msg;
+  TypedData_Get_Struct(msg_rb, MessageHeader, &Message_type, msg);
+
+  upb_status status = UPB_STATUS_INIT;
+  upb_json_parser parser;
+  upb_json_parser_init(&parser, &status);
+  if (!upb_ok(&status)) {
+    rb_raise(rb_eRuntimeError, "Error occurred during parsing: %s.",
+             upb_status_errmsg(&status));
+  }
+
+  upb_sink sink;
+  upb_sink_reset(&sink, desc->fill_handlers, msg);
+  upb_json_parser_resetoutput(&parser, &sink);
+  upb_bufsrc_putbuf(RSTRING_PTR(data), RSTRING_LEN(data),
+                    upb_json_parser_input(&parser));
+
+  upb_json_parser_uninit(&parser);
   if (!upb_ok(&status)) {
     rb_raise(rb_eRuntimeError, "Error occurred during parsing: %s.",
              upb_status_errmsg(&status));
@@ -542,12 +585,21 @@ static void putmsg(VALUE msg_rb, const Descriptor* desc,
   upb_sink_endmsg(sink, &status);
 }
 
-static const upb_handlers* msgdef_serialize_handlers(Descriptor* desc) {
-  if (desc->serialize_handlers == NULL) {
-    desc->serialize_handlers =
-        upb_pb_encoder_newhandlers(desc->msgdef, &desc->serialize_handlers);
+static const upb_handlers* msgdef_pb_serialize_handlers(Descriptor* desc) {
+  if (desc->pb_serialize_handlers == NULL) {
+    desc->pb_serialize_handlers =
+        upb_pb_encoder_newhandlers(desc->msgdef, &desc->pb_serialize_handlers);
   }
-  return desc->serialize_handlers;
+  return desc->pb_serialize_handlers;
+}
+
+static const upb_handlers* msgdef_json_serialize_handlers(Descriptor* desc) {
+  if (desc->json_serialize_handlers == NULL) {
+    desc->json_serialize_handlers =
+        upb_json_printer_newhandlers(
+            desc->msgdef, &desc->json_serialize_handlers);
+  }
+  return desc->json_serialize_handlers;
 }
 
 /*
@@ -565,7 +617,7 @@ VALUE Message_encode(VALUE klass, VALUE msg_rb) {
   stringsink_init(&sink);
 
   const upb_handlers* serialize_handlers =
-      msgdef_serialize_handlers(desc);
+      msgdef_pb_serialize_handlers(desc);
 
   upb_pb_encoder encoder;
   upb_pb_encoder_init(&encoder, serialize_handlers);
@@ -576,6 +628,36 @@ VALUE Message_encode(VALUE klass, VALUE msg_rb) {
   VALUE ret = rb_str_new(sink.ptr, sink.len);
 
   upb_pb_encoder_uninit(&encoder);
+  stringsink_uninit(&sink);
+
+  return ret;
+}
+
+/*
+ * call-seq:
+ *     MessageClass.encode_json(msg) => json_string
+ *
+ * Encodes the given message object into its serialized JSON representation.
+ */
+VALUE Message_encode_json(VALUE klass, VALUE msg_rb) {
+  VALUE descriptor = rb_iv_get(klass, kDescriptorInstanceVar);
+  Descriptor* desc = ruby_to_Descriptor(descriptor);
+
+  stringsink sink;
+  stringsink_init(&sink);
+
+  const upb_handlers* serialize_handlers =
+      msgdef_json_serialize_handlers(desc);
+
+  upb_json_printer printer;
+  upb_json_printer_init(&printer, serialize_handlers);
+  upb_json_printer_resetoutput(&printer, &sink.sink);
+
+  putmsg(msg_rb, desc, upb_json_printer_input(&printer), 0);
+
+  VALUE ret = rb_str_new(sink.ptr, sink.len);
+
+  upb_json_printer_uninit(&printer);
   stringsink_uninit(&sink);
 
   return ret;
@@ -595,6 +677,18 @@ VALUE Google_Protobuf_encode(VALUE self, VALUE msg_rb) {
 
 /*
  * call-seq:
+ *     Google::Protobuf.encode_json(msg) => json_string
+ *
+ * Encodes the given message object to its JSON representation. This is an
+ * alternative to the #encode_json method on msg's class.
+ */
+VALUE Google_Protobuf_encode_json(VALUE self, VALUE msg_rb) {
+  VALUE klass = CLASS_OF(msg_rb);
+  return rb_funcall(klass, rb_intern("encode_json"), 1, msg_rb);
+}
+
+/*
+ * call-seq:
  *     Google::Protobuf.decode(class, bytes) => msg
  *
  * Decodes the given bytes as protocol buffers wire format under the
@@ -603,4 +697,16 @@ VALUE Google_Protobuf_encode(VALUE self, VALUE msg_rb) {
  */
 VALUE Google_Protobuf_decode(VALUE self, VALUE klass, VALUE msg_rb) {
   return rb_funcall(klass, rb_intern("decode"), 1, msg_rb);
+}
+
+/*
+ * call-seq:
+ *     Google::Protobuf.decode_json(class, json_string) => msg
+ *
+ * Decodes the given JSON string under the interpretation given by the given
+ * class's message definition. This is an alternative to the #decode_json method
+ * on the given class.
+ */
+VALUE Google_Protobuf_decode_json(VALUE self, VALUE klass, VALUE msg_rb) {
+  return rb_funcall(klass, rb_intern("decode_json"), 1, msg_rb);
 }

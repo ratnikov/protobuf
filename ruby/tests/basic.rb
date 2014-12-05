@@ -583,5 +583,26 @@ module BasicTest
       end
     end
 
+    def test_json
+      m = TestMessage.new(:optional_int32 => 1234,
+                          :optional_int64 => -0x1_0000_0000,
+                          :optional_uint32 => 0x8000_0000,
+                          :optional_uint64 => 0xffff_ffff_ffff_ffff,
+                          :optional_bool => true,
+                          :optional_float => 1.0,
+                          :optional_double => -1e100,
+                          :optional_string => "Test string",
+                          :optional_bytes => "\xFF\xFF\xFF\xFF",
+                          :optional_msg => TestMessage2.new(:foo => 42),
+                          :repeated_int32 => [1, 2, 3, 4],
+                          :repeated_string => ["a", "b", "c"],
+                          :repeated_bool => [true, false, true, false],
+                          :repeated_msg => [TestMessage2.new(:foo => 1),
+                                            TestMessage2.new(:foo => 2)])
+
+      json_text = TestMessage.encode_json(m)
+      m2 = TestMessage.decode_json(json_text)
+      assert m == m2
+    end
   end
 end

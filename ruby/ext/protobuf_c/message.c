@@ -340,10 +340,6 @@ VALUE build_class_from_descriptor(Descriptor* desc) {
   if (desc->fill_method == NULL) {
     desc->fill_method = new_fillmsg_decodermethod(desc, &desc->fill_method);
   }
-  if (desc->serialize_handlers == NULL) {
-    desc->serialize_handlers =
-        upb_pb_encoder_newhandlers(desc->msgdef, &desc->serialize_handlers);
-  }
 
   const char* name = upb_msgdef_fullname(desc->msgdef);
   if (name == NULL) {
@@ -369,6 +365,8 @@ VALUE build_class_from_descriptor(Descriptor* desc) {
   rb_define_method(klass, "[]=", Message_index_set, 2);
   rb_define_singleton_method(klass, "decode", Message_decode, 1);
   rb_define_singleton_method(klass, "encode", Message_encode, 1);
+  rb_define_singleton_method(klass, "decode_json", Message_decode_json, 1);
+  rb_define_singleton_method(klass, "encode_json", Message_encode_json, 1);
   rb_define_singleton_method(klass, "descriptor", Message_descriptor, 0);
   return klass;
 }
