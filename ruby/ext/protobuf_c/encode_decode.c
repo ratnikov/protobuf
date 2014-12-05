@@ -251,14 +251,23 @@ static const upb_handlers *new_fill_handlers(Descriptor* desc,
                                 add_handlers_for_message, NULL);
 }
 
+// Constructs the handlers for filling a message's data into an in-memory
+// object.
+const upb_handlers* get_fill_handlers(Descriptor* desc) {
+  if (!desc->fill_handlers) {
+    desc->fill_handlers =
+        new_fill_handlers(desc, &desc->fill_handlers);
+  }
+  return desc->fill_handlers;
+}
+
 // Constructs the upb decoder method for parsing messages of this type.
 // This is called from the message class creation code.
 const upb_pbdecodermethod *new_fillmsg_decodermethod(Descriptor* desc,
                                                      const void* owner) {
-  desc->fill_handlers =
-      new_fill_handlers(desc, &desc->fill_handlers);
+  const upb_handlers* handlers = get_fill_handlers(desc);
   upb_pbdecodermethodopts opts;
-  upb_pbdecodermethodopts_init(&opts, desc->fill_handlers);
+  upb_pbdecodermethodopts_init(&opts, handlers);
 
   const upb_pbdecodermethod *ret = upb_pbdecodermethod_new(&opts, owner);
   return ret;
@@ -328,8 +337,11 @@ VALUE Message_decode_json(VALUE klass, VALUE data) {
   VALUE msgklass = Descriptor_msgclass(descriptor);
 
   if (TYPE(data) != T_STRING) {
-    rb_raise(rb_eArgError, "Expected string for binary protobuf data.");
+    rb_raise(rb_eArgError, "Expected string for JSON data.");
   }
+  // TODO(cfallin): Check and respect string encoding. If not UTF-8, we need to
+  // convert, because string handlers pass data directly to message string
+  // fields.
 
   VALUE msg_rb = rb_class_new_instance(0, NULL, msgklass);
   MessageHeader* msg;
@@ -338,13 +350,9 @@ VALUE Message_decode_json(VALUE klass, VALUE data) {
   upb_status status = UPB_STATUS_INIT;
   upb_json_parser parser;
   upb_json_parser_init(&parser, &status);
-  if (!upb_ok(&status)) {
-    rb_raise(rb_eRuntimeError, "Error occurred during parsing: %s.",
-             upb_status_errmsg(&status));
-  }
 
   upb_sink sink;
-  upb_sink_reset(&sink, desc->fill_handlers, msg);
+  upb_sink_reset(&sink, get_fill_handlers(desc), msg);
   upb_json_parser_resetoutput(&parser, &sink);
   upb_bufsrc_putbuf(RSTRING_PTR(data), RSTRING_LEN(data),
                     upb_json_parser_input(&parser));
@@ -672,7 +680,7 @@ VALUE Message_encode_json(VALUE klass, VALUE msg_rb) {
  */
 VALUE Google_Protobuf_encode(VALUE self, VALUE msg_rb) {
   VALUE klass = CLASS_OF(msg_rb);
-  return rb_funcall(klass, rb_intern("encode"), 1, msg_rb);
+  return Message_encode(klass, msg_rb);
 }
 
 /*
@@ -684,7 +692,7 @@ VALUE Google_Protobuf_encode(VALUE self, VALUE msg_rb) {
  */
 VALUE Google_Protobuf_encode_json(VALUE self, VALUE msg_rb) {
   VALUE klass = CLASS_OF(msg_rb);
-  return rb_funcall(klass, rb_intern("encode_json"), 1, msg_rb);
+  return Message_encode_json(klass, msg_rb);
 }
 
 /*
@@ -696,7 +704,7 @@ VALUE Google_Protobuf_encode_json(VALUE self, VALUE msg_rb) {
  * alternative to the #decode method on the given class.
  */
 VALUE Google_Protobuf_decode(VALUE self, VALUE klass, VALUE msg_rb) {
-  return rb_funcall(klass, rb_intern("decode"), 1, msg_rb);
+  return Message_decode(klass, msg_rb);
 }
 
 /*
@@ -708,5 +716,5 @@ VALUE Google_Protobuf_decode(VALUE self, VALUE klass, VALUE msg_rb) {
  * on the given class.
  */
 VALUE Google_Protobuf_decode_json(VALUE self, VALUE klass, VALUE msg_rb) {
-  return rb_funcall(klass, rb_intern("decode_json"), 1, msg_rb);
+  return Message_decode_json(klass, msg_rb);
 }
