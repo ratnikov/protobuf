@@ -267,11 +267,16 @@ void native_slot_dup(upb_fieldtype_t type, void* to, void* from) {
 void native_slot_clone(upb_fieldtype_t type, void* to, void* from) {
   switch (type) {
     case UPB_TYPE_STRING:
-    case UPB_TYPE_BYTES:
+    case UPB_TYPE_BYTES: {
+      VALUE from_val = DEREF(from, VALUE);
+      DEREF(to, VALUE) = (from_val != Qnil) ?
+          rb_funcall(from_val, rb_intern("dup"), 0) : Qnil;
+      break;
+    }
     case UPB_TYPE_MESSAGE: {
       VALUE from_val = DEREF(from, VALUE);
       DEREF(to, VALUE) = (from_val != Qnil) ?
-          rb_funcall(from_val, rb_intern("clone"), 0) : Qnil;
+          Message_clone(from_val) : Qnil;
       break;
     }
     default:

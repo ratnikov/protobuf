@@ -297,13 +297,7 @@ VALUE RepeatedField_dup(VALUE _self) {
   return new_rptfield;
 }
 
-/*
- * call-seq:
- *     RepeatedField.clone => repeated_field
- *
- * Duplicates this repeated field with a deep copy, using the #clone method on
- * members.
- */
+// Internal only: used by Google::Protobuf.deep_copy.
 VALUE RepeatedField_clone(VALUE _self) {
   RepeatedField* self = ruby_to_RepeatedField(_self);
   VALUE new_rptfield = RepeatedField_new_this_type(_self);
@@ -593,7 +587,6 @@ void RepeatedField_register(VALUE module) {
   rb_define_method(klass, "clear", RepeatedField_clear, 0);
   rb_define_method(klass, "length", RepeatedField_length, 0);
   rb_define_method(klass, "dup", RepeatedField_dup, 0);
-  rb_define_method(klass, "clone", RepeatedField_clone, 0);
   rb_define_method(klass, "==", RepeatedField_eq, 1);
   rb_define_method(klass, "hash", RepeatedField_hash, 0);
   rb_define_method(klass, "inspect", RepeatedField_inspect, 0);

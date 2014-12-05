@@ -251,7 +251,7 @@ module BasicTest
       assert l2[0] == l[0]
       assert l2[0].object_id == l[0].object_id
 
-      l2 = l.clone
+      l2 = Google::Protobuf.deep_copy(l)
       assert l2[0] == l[0]
       assert l2[0].object_id != l[0].object_id
 
@@ -328,10 +328,10 @@ module BasicTest
       assert m.repeated_msg[0].object_id == m2.repeated_msg[0].object_id
     end
 
-    def test_clone
+    def test_deep_copy
       m = TestMessage.new(:optional_int32 => 42,
                           :repeated_msg => [TestMessage2.new(:foo => 100)])
-      m2 = m.clone
+      m2 = Google::Protobuf.deep_copy(m)
       assert m == m2
       assert m.repeated_msg == m2.repeated_msg
       assert m.repeated_msg.object_id != m2.repeated_msg.object_id
