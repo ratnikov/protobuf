@@ -203,12 +203,7 @@ VALUE Message_dup(VALUE _self) {
   return new_msg;
 }
 
-/*
- * call-seq:
- *     Message.clone => new_message
- *
- * Performs a deep copy of this message and returns the new copy.
- */
+// Internal only; used by Google::Protobuf.deep_copy.
 VALUE Message_clone(VALUE _self) {
   MessageHeader* self;
   TypedData_Get_Struct(_self, MessageHeader, &Message_type, self);
@@ -361,7 +356,6 @@ VALUE build_class_from_descriptor(Descriptor* desc) {
                    Message_method_missing, -1);
   rb_define_method(klass, "initialize", Message_initialize, -1);
   rb_define_method(klass, "dup", Message_dup, 0);
-  rb_define_method(klass, "clone", Message_clone, 0);
   rb_define_method(klass, "==", Message_eq, 1);
   rb_define_method(klass, "hash", Message_hash, 0);
   rb_define_method(klass, "inspect", Message_inspect, 0);
@@ -450,4 +444,20 @@ VALUE build_module_from_enumdesc(EnumDescriptor* enumdesc) {
   rb_iv_set(mod, kDescriptorInstanceVar, get_def_obj(enumdesc->enumdef));
 
   return mod;
+}
+
+/*
+ * call-seq:
+ *     Google::Protobuf.deep_copy(obj) => copy_of_obj
+ *
+ * Performs a deep copy of either a RepeatedField instance or a message object,
+ * recursively copying its members.
+ */
+VALUE Google_Protobuf_deep_copy(VALUE self, VALUE obj) {
+  VALUE klass = CLASS_OF(obj);
+  if (klass == cRepeatedField) {
+    return RepeatedField_clone(obj);
+  } else {
+    return Message_clone(obj);
+  }
 }

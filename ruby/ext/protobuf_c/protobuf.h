@@ -358,6 +358,8 @@ VALUE Message_encode(VALUE klass, VALUE msg_rb);
 VALUE Google_Protobuf_encode(VALUE self, VALUE msg_rb);
 VALUE Google_Protobuf_decode(VALUE self, VALUE klass, VALUE msg_rb);
 
+VALUE Google_Protobuf_deep_copy(VALUE self, VALUE obj);
+
 VALUE build_module_from_enumdesc(EnumDescriptor* enumdef);
 VALUE enum_lookup(VALUE self, VALUE number);
 VALUE enum_resolve(VALUE self, VALUE sym);
