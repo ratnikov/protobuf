@@ -6,10 +6,7 @@ set -x
 install_root=/tmp/protobuf-test
 
 install_deps() {
-  sudo apt-get install ruby1.9.1-dev
-  sudo gem install rubygems-update
-  sudo update_rubygems
-  sudo gem install bundler rake rake-compiler rspec rubygems-tasks
+  sudo apt-get install ruby1.9.1-dev rake rake-compiler ruby-rspec ruby-bundler
 }
 
 build_base() {
