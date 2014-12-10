@@ -20,10 +20,11 @@ test_ruby() {
 
 case "$1" in
   install)
+    sudo gem install rubygems-tasks
     ;;
   test)
-    build_base
-    export PATH=$install_root/bin:$PATH
+    #build_base
+    #export PATH=$install_root/bin:$PATH
     test_ruby
     ;;
 esac
