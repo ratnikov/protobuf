@@ -6,10 +6,8 @@ install_root=/tmp/protobuf-test
 
 install_deps() {
   sudo apt-get install ruby1.9.1-dev
-  sudo gem install update_rubygems
-  pushd /var/lib/gems/1.9.1/bin
-  sudo ./update_rubygems
-  popd
+  sudo gem install rubygems-update
+  sudo update_rubygems
   sudo gem install bundler rake rake-compiler rspec rubygems-tasks
 }
 
