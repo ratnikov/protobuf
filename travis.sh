@@ -1,6 +1,7 @@
 #!/bin/bash
 
 set -e
+set -x
 
 install_root=/tmp/protobuf-test
 
