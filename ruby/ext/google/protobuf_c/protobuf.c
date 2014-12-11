@@ -68,7 +68,7 @@ rb_encoding* kRubyString8bitEncoding;
 // Initialization/entry point.
 // -----------------------------------------------------------------------------
 
-// This must be named "Init_protobuf_c" because the Ruby module is named
+// This must be named "Init__protobuf_c" because the Ruby module is named
 // "protobuf_c" -- the VM looks for this symbol in our .so.
 void Init_protobuf_c() {
   VALUE google = rb_define_module("Google");

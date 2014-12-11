@@ -2,7 +2,7 @@
 
 require 'mkmf'
 
-upb_path = File.absolute_path(File.dirname($0)) + "/../../../upb"
+upb_path = File.absolute_path(File.dirname($0)) + "/../../../../upb"
 libs = ["upb_pic", "upb.pb_pic", "upb.json_pic"]
 system("cd #{upb_path}; make " + libs.map{|l| "lib/lib#{l}.a"}.join(" "))
 
@@ -20,4 +20,4 @@ find_library("upb.json_pic", "upb_json_printer_init", upb_path + "/lib") or
 $objs = ["protobuf.o", "defs.o", "storage.o", "message.o",
          "repeated_field.o", "encode_decode.o"]
 
-create_makefile("protobuf_c")
+create_makefile("google/protobuf_c")
