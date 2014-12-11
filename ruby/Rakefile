@@ -2,7 +2,7 @@ require "rake/extensiontask"
 require "rake/testtask"
 
 spec = Gem::Specification.new do |s|
-  s.name        = "google/protobuf"
+  s.name        = "google-protobuf"
   s.version     = "2.6.2"
   s.licenses    = ["BSD"]
   s.summary     = "Protocol Buffers"
