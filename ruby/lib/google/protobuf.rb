@@ -28,4 +28,9 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-require 'google/protobuf_c'
+case RUBY_PLATFORM
+when /java/
+  require 'google/protobuf_java'
+else # MRI
+  require 'google/protobuf_c'
+end
