@@ -6,7 +6,7 @@ require 'test/unit'
 # ------------- generated code --------------
 
 module BasicTest
-  descriptor = Google::Protobuf::DescriptorPool.new('basic.Basic')
+  descriptor = Google::Protobuf::Descriptor.new('basic.Basic')
 
   TestMessage = descriptor.lookup("TestMessage")
   #TestMessage2 = pool.lookup("TestMessage2").msgclass

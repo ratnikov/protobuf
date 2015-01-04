@@ -29,8 +29,16 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 case RUBY_PLATFORM
-when /java/
+when /.*/, /java/
   require 'google/protobuf_java'
+  java_import 'com.google.protobuf.jruby.RubyDescriptor'
+
+  module Google
+    module Protobuf
+    end
+  end
+
+  RubyDescriptor.createDescriptorClass JRuby.runtime
 else # MRI
   require 'google/protobuf_c'
 end
