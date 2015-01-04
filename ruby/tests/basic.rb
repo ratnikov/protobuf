@@ -6,61 +6,14 @@ require 'test/unit'
 # ------------- generated code --------------
 
 module BasicTest
-  pool = Google::Protobuf::DescriptorPool.new
-  pool.build do
-    add_message "TestMessage" do
-      optional :optional_int32,  :int32,        1
-      optional :optional_int64,  :int64,        2
-      optional :optional_uint32, :uint32,       3
-      optional :optional_uint64, :uint64,       4
-      optional :optional_bool,   :bool,         5
-      optional :optional_float,  :float,        6
-      optional :optional_double, :double,       7
-      optional :optional_string, :string,       8
-      optional :optional_bytes,  :bytes,        9
-      optional :optional_msg,    :message,      10, "TestMessage2"
-      optional :optional_enum,   :enum,         11, "TestEnum"
+  descriptor = Google::Protobuf::DescriptorPool.new('basic.Basic')
 
-      repeated :repeated_int32,  :int32,        12
-      repeated :repeated_int64,  :int64,        13
-      repeated :repeated_uint32, :uint32,       14
-      repeated :repeated_uint64, :uint64,       15
-      repeated :repeated_bool,   :bool,         16
-      repeated :repeated_float,  :float,        17
-      repeated :repeated_double, :double,       18
-      repeated :repeated_string, :string,       19
-      repeated :repeated_bytes,  :bytes,        20
-      repeated :repeated_msg,    :message,      21, "TestMessage2"
-      repeated :repeated_enum,   :enum,         22, "TestEnum"
-    end
-    add_message "TestMessage2" do
-      optional :foo, :int32, 1
-    end
-    add_message "Recursive1" do
-      optional :foo, :message, 1, "Recursive2"
-    end
-    add_message "Recursive2" do
-      optional :foo, :message, 1, "Recursive1"
-    end
-    add_enum "TestEnum" do
-      value :Default, 0
-      value :A, 1
-      value :B, 2
-      value :C, 3
-    end
-    add_message "BadFieldNames" do
-      optional :dup, :int32, 1
-      optional :class, :int32, 2
-      optional :"a.b", :int32, 3
-    end
-  end
-
-  TestMessage = pool.lookup("TestMessage").msgclass
-  TestMessage2 = pool.lookup("TestMessage2").msgclass
-  Recursive1 = pool.lookup("Recursive1").msgclass
-  Recursive2 = pool.lookup("Recursive2").msgclass
-  TestEnum = pool.lookup("TestEnum").enummodule
-  BadFieldNames = pool.lookup("BadFieldNames").msgclass
+  TestMessage = descriptor.lookup("TestMessage")
+  #TestMessage2 = pool.lookup("TestMessage2").msgclass
+  #Recursive1 = pool.lookup("Recursive1").msgclass
+  #Recursive2 = pool.lookup("Recursive2").msgclass
+  #TestEnum = pool.lookup("TestEnum").enummodule
+  #BadFieldNames = pool.lookup("BadFieldNames").msgclass
 
 # ------------ test cases ---------------
 
@@ -68,40 +21,40 @@ module BasicTest
 
     def test_defaults
       m = TestMessage.new
-      assert m.optional_int32 == 0
-      assert m.optional_int64 == 0
-      assert m.optional_uint32 == 0
-      assert m.optional_uint64 == 0
-      assert m.optional_bool == false
-      assert m.optional_float == 0.0
-      assert m.optional_double == 0.0
-      assert m.optional_string == ""
-      assert m.optional_bytes == ""
-      assert m.optional_msg == nil
-      assert m.optional_enum == :Default
+      assert_equal 0, m.optional_int32
+      assert_equal 0, m.optional_int64
+      assert_equal 0, m.optional_uint32
+      assert_equal 0, m.optional_uint64
+      assert_equal false, m.optional_bool
+      assert_equal 0.0, m.optional_float
+      assert_equal 0.0, m.optional_double
+      assert_equal "", m.optional_string
+      assert_equal "", m.optional_bytes
+      assert_equal nil, m.optional_msg
+      assert_equal :Default, m.optional_enum
     end
 
     def test_setters
       m = TestMessage.new
       m.optional_int32 = -42
-      assert m.optional_int32 == -42
+      assert_equal -42, m.optional_int32
       m.optional_int64 = -0x1_0000_0000
-      assert m.optional_int64 == -0x1_0000_0000
+      assert_equal -0x1_0000_0000, m.optional_int64
       m.optional_uint32 = 0x9000_0000
-      assert m.optional_uint32 == 0x9000_0000
+      assert_equal 0x9000_0000, m.optional_uint32
       m.optional_uint64 = 0x9000_0000_0000_0000
-      assert m.optional_uint64 == 0x9000_0000_0000_0000
+      assert_equal 0x9000_0000_0000_0000, m.optional_uint64
       m.optional_bool = true
-      assert m.optional_bool == true
+      assert_equal true, m.optional_bool
       m.optional_float = 0.5
-      assert m.optional_float == 0.5
+      assert_equal 0.5, m.optional_float
       m.optional_double = 0.5
       m.optional_string = "hello"
-      assert m.optional_string == "hello"
+      assert_equal "hello", m.optional_string
       m.optional_bytes = "world".encode!('ASCII-8BIT')
-      assert m.optional_bytes == "world"
+      assert_equal "world", m.optional_bytes
       m.optional_msg = TestMessage2.new(:foo => 42)
-      assert m.optional_msg == TestMessage2.new(:foo => 42)
+      assert_equal TestMessage2.new(:foo => 42), m.optional_msg
     end
 
     def test_ctor_args
